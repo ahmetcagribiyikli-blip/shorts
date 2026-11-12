@@ -45,6 +45,10 @@ button:disabled{opacity:.4;cursor:not-allowed}
 #metaStatus{min-height:24px;font-size:15px;margin-top:8px}
 #metaStatus.err{color:var(--err)}
 #pxKey{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
+#kvoice{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
+#kStatus{min-height:24px;font-size:15px}
+#kStatus.err{color:var(--err)}
+#chName{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
 #pxStatus{min-height:24px;font-size:15px}
 #pxStatus.err{color:var(--err)}
 a{color:inherit}
@@ -66,6 +70,15 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <h2><span class="n">2</span>Ses</h2>
 <label class="file"><input type="file" id="audio"><span id="audioName">CapCut’tan aldığın ses dosyasını seç</span></label>
 <div class="hint">MP3 ya da M4A en sorunsuzu. Kelime zamanlaması konuşma hızına göre tahmin edilir; kayarsa aşağıdaki ayarı kullan.</div>
+<div class="hint" style="margin-top:14px"><b>Ya da</b> ücretsiz yapay zekâ sesiyle üret. İlk seferde yaklaşık 90 MB model indirir, Wi-Fi’de dene. Üretim bitene kadar sayfadan çıkma.</div>
+<select id="kvoice" aria-label="Ses seçimi">
+<option value="af_heart">Kadın, sıcak (ABD)</option>
+<option value="af_bella">Kadın, enerjik (ABD)</option>
+<option value="am_michael">Erkek, sakin (ABD)</option>
+<option value="am_adam">Erkek, derin (ABD)</option>
+</select>
+<div class="row"><button id="kgen" disabled>Sesi üret</button></div>
+<div id="kStatus" role="status"></div>
 </section>
 
 <section>
@@ -82,6 +95,8 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <div class="row"><button id="prev" disabled>Önizle</button><button id="rec" class="primary" disabled>Videoyu oluştur</button></div>
 <div class="sync"><label for="off">Altyazı gecikmesi</label><output id="offv">0,00 sn</output><input type="range" id="off" min="-1" max="1" step="0.05" value="0"></div>
 <label class="fx"><input type="checkbox" id="fx" checked> Müzik ve ses efektleri ekle</label>
+<label class="fx"><input type="checkbox" id="outro" checked> Sonuna “Follow” sahnesi ekle</label>
+<input id="chName" type="text" placeholder="Kanal adı (filigran ve son sahne, boş bırakabilirsin)" autocomplete="off" autocapitalize="off" spellcheck="false">
 <div id="status" role="status"></div>
 <div id="result" hidden>
 <video id="out" controls playsinline></video>
@@ -90,6 +105,23 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 </section>
 
 
+<section>
+<h2><span class="n">5</span>Başlık, açıklama, etiketler</h2>
+<div class="hint">Senaryodan basit kurallarla çıkarılır, yapay zekâ yazmaz. Kopyalayıp YouTube’a yapıştır. Video dilini Studio’da English yap.</div>
+<button id="metaBtn" disabled>Metinleri üret</button>
+<div id="metaOut" hidden>
+<label class="ml" for="mTitle">Başlık</label>
+<textarea id="mTitle" readonly rows="2"></textarea>
+<button data-copy="mTitle">Başlığı kopyala</button>
+<label class="ml" for="mDesc">Açıklama</label>
+<textarea id="mDesc" readonly rows="7"></textarea>
+<button data-copy="mDesc">Açıklamayı kopyala</button>
+<label class="ml" for="mTags">Etiketler</label>
+<textarea id="mTags" readonly rows="3"></textarea>
+<button data-copy="mTags">Etiketleri kopyala</button>
+</div>
+<div id="metaStatus" role="status"></div>
+</section>
 </main>
 <footer>Stok videolar <a href="https://pixabay.com" target="_blank" rel="noopener">Pixabay</a> ve <a href="https://www.pexels.com" target="_blank" rel="noopener">Pexels</a> tarafından sağlanır.</footer>
 
@@ -347,13 +379,14 @@ function sfx(sink0,tz){
       const ks=tz+words[hookKey(sc)].t0*d+off;tone(ks,95,.6,.5,'sine');whoosh(ks-.1);
     }
   });
+  if(OUT()){const os=tz+d+.3;whoosh(os-.05);tone(os+.45,1318,.4,.07,'sine')}
   const pad=ctx.createGain();
   pad.gain.setValueAtTime(0,tz);pad.gain.linearRampToValueAtTime(.045,tz+1.5);
-  pad.gain.setValueAtTime(.045,tz+Math.max(1.5,d-1));pad.gain.linearRampToValueAtTime(0,tz+d+.4);
+  pad.gain.setValueAtTime(.045,tz+Math.max(1.5,d-1));pad.gain.linearRampToValueAtTime(0,tz+d+OUT()+.4);
   const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=900;pad.connect(lp);lp.connect(sink);
   [110,164.81,261.63,329.63].forEach((fq,i)=>{[0,4].forEach(dt=>{
     const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=fq;o.detune.value=dt*(i%2?1:-1);
-    const og=ctx.createGain();og.gain.value=.25;o.connect(og);og.connect(pad);o.start(tz);o.stop(tz+d+.5);
+    const og=ctx.createGain();og.gain.value=.25;o.connect(og);og.connect(pad);o.start(tz);o.stop(tz+d+OUT()+.5);
   })});
 }
 let activeV=null;
@@ -418,6 +451,107 @@ $('pxFind').addEventListener('click',async()=>{
   pst(ok+'/'+scenes.length+' sahneye klip bulundu. Kalanlarda animasyon kullanılır.');
   draw(0);
 });
+const STOP=new Set('about after again also because been before being between both could does doing down during each even from have having here into just like made make many more most much must only other over same should some such than that their them then there these they this those through very want were what when where which while with would your yours will been get got how why who our out its not and the for are but you was can has had one two any all new'.split(' '));
+function genMeta(){
+  const clean=words.map(w=>w.x).join(' ').replace(/\s+/g,' ').trim();
+  const sents=(clean.match(/[^.!?]+[.!?]*/g)||[clean]).map(x=>x.trim()).filter(Boolean);
+  let hook=(sents[0]||'').replace(/[.!?]+$/,'');
+  if(hook.length>60)hook=hook.slice(0,60).replace(/\s+\S*$/,'')+'…';
+  const title=hook+' #Shorts';
+  const cnt={};
+  clean.toLowerCase().replace(/[^a-z0-9\s'-]/g,' ').split(/\s+/).forEach(w=>{w=w.replace(/^['-]+|['-]+$/g,'');if(w.length>3&&!STOP.has(w)&&!/^\d+$/.test(w))cnt[w]=(cnt[w]||0)+1});
+  const kw=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]||b.length-a.length).slice(0,8);
+  const hs=['#Shorts','#PersonalFinance','#MoneyTips'].concat(kw.slice(0,2).map(k=>'#'+k.replace(/^./,c=>c.toUpperCase())));
+  const desc=sents.slice(0,2).join(' ')+'\n\nFollow for more money basics.\nThis video is for general information only, not financial advice.\n\n'+[...new Set(hs)].join(' ');
+  const tags=[...new Set(kw.concat(['personal finance','money tips','finance for beginners','shorts']))].slice(0,14).join(', ');
+  return {title,desc,tags};
+}
+function say2(m,err){const e=$('metaStatus');e.textContent=m||'';e.className=err?'err':''}
+async function copyEl(id){
+  const el=$(id);
+  try{await navigator.clipboard.writeText(el.value);say2('Kopyalandı.')}
+  catch(e){el.focus();el.select();el.setSelectionRange(0,99999);try{document.execCommand('copy');say2('Kopyalandı.')}catch(_){say2('Metni seçip elle kopyala.',true)}}
+}
+document.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',()=>copyEl(b.dataset.copy)));
+$('script').addEventListener('input',()=>{$('metaBtn').disabled=!words.length});
+$('metaBtn').addEventListener('click',()=>{
+  if(!words.length)return;
+  const m=genMeta();$('mTitle').value=m.title;$('mDesc').value=m.desc;$('mTags').value=m.tags;$('metaOut').hidden=false;say2('');
+});
+let tts=null,genBuf=false;
+function estTimes(){const tot=words.reduce((n,w)=>n+w.wt,0);let acc=0;words.forEach(w=>{w.t0=acc/tot;acc+=w.wt;w.t1=acc/tot})}
+function kst(m,err){const e=$('kStatus');e.textContent=m||'';e.className=err?'err':''}
+$('script').addEventListener('input',()=>{
+  $('kgen').disabled=!words.length;
+  if(genBuf){buf=null;genBuf=false;$('audioName').textContent='CapCut’tan aldığın ses dosyasını seç';kst('Metin değişti, sesi yeniden üret.');refresh()}
+});
+$('kgen').addEventListener('click',async()=>{
+  if(!words.length)return;
+  $('kgen').disabled=true;
+  try{
+    ctx=ctx||new AC();
+    if(!tts){
+      kst('Ses modeli indiriliyor, ilk seferde biraz sürer…');
+      const mod=await import('https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm');
+      tts=await mod.KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX',{dtype:'q8',device:'wasm',progress_callback:p=>{if(p&&p.status==='progress'&&p.total)kst('Model indiriliyor: %'+Math.round(p.loaded/p.total*100))}});
+    }
+    const voice=$('kvoice').value,parts=[];let sr=24000;
+    for(let i=0;i<scenes.length;i++){
+      kst('Ses üretiliyor '+(i+1)+'/'+scenes.length+'…');
+      const sc=scenes[i],a=await tts.generate(words.slice(sc.s,sc.e).map(w=>w.x).join(' '),{voice});
+      sr=a.sampling_rate||sr;parts.push(a.audio);
+    }
+    const gap=Math.round(sr*.12),tail=Math.round(sr*.35);
+    const total=parts.reduce((n,c)=>n+c.length+gap,0)+tail;
+    const out=new Float32Array(total),segs=[];let pos=0;
+    parts.forEach(c=>{segs.push([pos/sr,(pos+c.length)/sr]);out.set(c,pos);pos+=c.length+gap});
+    const ab=ctx.createBuffer(1,total,sr);ab.getChannelData(0).set(out);
+    buf=ab;genBuf=true;
+    const D=ab.duration;
+    scenes.forEach((sc,k)=>{
+      const ws=words.slice(sc.s,sc.e),tw=ws.reduce((n,w)=>n+w.wt,0),L=segs[k][1]-segs[k][0];let acc=0;
+      ws.forEach(w=>{w.t0=(segs[k][0]+L*acc/tw)/D;acc+=w.wt});
+    });
+    words.forEach((w,i)=>{w.t1=i<words.length-1?words[i+1].t0:1});
+    $('audioName').textContent='Yapay zekâ sesi hazır · '+D.toFixed(1).replace('.',',')+' sn';
+    kst('Ses hazır. Önizleyebilirsin.');
+    refresh();
+  }catch(e){
+    kst('Ses üretilemedi: '+((e&&e.message)||'bilinmeyen hata')+'. CapCut sesiyle devam edebilirsin.',true);
+  }
+  $('kgen').disabled=!words.length;
+});
+const OUT=()=>$('outro').checked?2.4:0;
+function popText(x,y,sz,col,t0,ot,maxw){
+  const p=(ot-t0)/.3;if(p<=0)return;
+  g.font=sz+'px Anton, Impact, sans-serif';
+  while(maxw&&g.measureText(x).width>maxw&&sz>50){sz-=6;g.font=sz+'px Anton, Impact, sans-serif'}
+  const sc=Math.max(.001,1+.5*(1-eb(p)));
+  g.save();g.translate(W/2,y);g.scale(sc,sc);g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';
+  g.lineWidth=sz*.12;g.strokeStyle='#000';g.strokeText(x,0,0);g.fillStyle=col;g.fillText(x,0,0);g.restore();
+}
+function drawOutro(ot,t){
+  bg({pal:PALS[1],s:3},t,ot);
+  const n=($('chName').value||'').trim().replace(/^@/,'').toUpperCase();
+  popText('FOLLOW',700,270,'#FFD23F',0,ot,960);
+  popText('FOR MORE',905,120,'#fff',.25,ot,960);
+  popText(n||'MONEY TIPS',1050,150,'#FFD23F',.5,ot,960);
+  if(ot>.8){
+    const q=Math.min(1,(ot-.8)/.3),z=Math.max(.001,eb(q)*(1+.04*Math.sin(t*6)));
+    g.save();g.translate(W/2,1290);g.scale(z,z);
+    rr(-260,-65,520,130,65);g.fillStyle='#FFB703';g.fill();
+    g.fillStyle='#1A1200';g.font='72px Anton, Impact, sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText('+ FOLLOW',0,4);
+    const rp=((ot-.8)*1.2)%1;g.strokeStyle='rgba(255,255,255,'+(.7*(1-rp))+')';g.lineWidth=8;g.beginPath();g.arc(170,0,30+rp*120,0,7);g.stroke();
+    g.restore();
+  }
+}
+function watermark(){
+  const n=($('chName').value||'').trim();if(!n)return;
+  g.save();g.globalAlpha=.6;g.font='52px Anton, Impact, sans-serif';g.textAlign='left';g.textBaseline='middle';
+  g.fillStyle='#fff';g.shadowColor='rgba(0,0,0,.6)';g.shadowBlur=8;g.fillText(n,60,150);g.restore();
+}
+try{$('chName').value=localStorage.getItem('chname')||''}catch(e){}
+$('chName').addEventListener('input',()=>{try{localStorage.setItem('chname',$('chName').value)}catch(e){}if(!mode)draw(0)});
 function caps(i,wp){
   const ch=chunks.find(c=>i>=c.a&&i<c.b)||chunks[chunks.length-1];
   g.font='118px Anton, Impact, sans-serif';g.textBaseline='middle';g.lineJoin='round';
@@ -453,13 +587,14 @@ function idle(){
 function draw(t){
   if(!words.length){idle();return}
   const d=dur(),f=Math.min(Math.max((t-off)/d,0),.9999);
+  if(OUT()&&t>=d+.3){drawOutro(t-d-.3,t);watermark();return}
   let i=words.findIndex(w=>f>=w.t0&&f<w.t1);if(i<0)i=0;
   const sc=scenes.find(s=>i>=s.s&&i<s.e)||scenes[0];
   const local=Math.max(0,t-(words[sc.s].t0*d+off));
   if(sc.vid&&sc.vid.readyState>=2){vbg(sc,t,local);if(sc.kind==='stat'||sc.hook)illus(sc,t,local)}else{bg(sc,t,local);illus(sc,t,local)}
   const w=words[i];if(sc.hook)drawHook(sc,i,t,d);else caps(i,((f-w.t0)*d)/.18);
   g.fillStyle='rgba(255,255,255,.28)';g.fillRect(90,70,W-180,10);
-  g.fillStyle='#fff';g.fillRect(90,70,(W-180)*Math.min(1,t/d),10);trans(sc,local);
+  g.fillStyle='#fff';g.fillRect(90,70,(W-180)*Math.min(1,t/d),10);trans(sc,local);watermark();
 }
 
 function refresh(){
@@ -506,7 +641,7 @@ async function start(record){
 function loop(){
   const t=ctx.currentTime-t0,d=dur();
   draw(Math.max(0,t));
-  if(t>=d+.5){finish();return}
+  if(t>=d+OUT()+.5){finish();return}
   if(mode==='rec')say('Video oluşturuluyor: %'+Math.min(99,Math.round(Math.max(0,t)/d*100))+'. Ekranı açık tut.');
   raf=requestAnimationFrame(loop);
 }
@@ -524,7 +659,7 @@ $('audio').addEventListener('change',async e=>{
   $('audioName').textContent='Ses çözülüyor…';
   try{
     ctx=ctx||new AC();
-    buf=await ctx.decodeAudioData(await f.arrayBuffer());
+    buf=await ctx.decodeAudioData(await f.arrayBuffer());estTimes();genBuf=false;
     $('audioName').textContent=f.name+' · '+buf.duration.toFixed(1).replace('.',',')+' sn';
     say('');
   }catch(err){
