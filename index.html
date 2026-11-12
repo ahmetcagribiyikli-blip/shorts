@@ -478,7 +478,7 @@ $('metaBtn').addEventListener('click',()=>{
   if(!words.length)return;
   const m=genMeta();$('mTitle').value=m.title;$('mDesc').value=m.desc;$('mTags').value=m.tags;$('metaOut').hidden=false;say2('');
 });
-let tts=null,genBuf=false;
+let tts=null,genBuf=false,kBusy=false;
 function estTimes(){const tot=words.reduce((n,w)=>n+w.wt,0);let acc=0;words.forEach(w=>{w.t0=acc/tot;acc+=w.wt;w.t1=acc/tot})}
 function kst(m,err){const e=$('kStatus');e.textContent=m||'';e.className=err?'err':''}
 $('script').addEventListener('input',()=>{
@@ -487,7 +487,7 @@ $('script').addEventListener('input',()=>{
 });
 $('kgen').addEventListener('click',async()=>{
   if(!words.length)return;
-  $('kgen').disabled=true;
+  kBusy=true;$('kgen').disabled=true;
   try{
     ctx=ctx||new AC();
     if(!tts){
@@ -519,7 +519,7 @@ $('kgen').addEventListener('click',async()=>{
   }catch(e){
     kst('Ses üretilemedi: '+((e&&e.message)||'bilinmeyen hata')+'. CapCut sesiyle devam edebilirsin.',true);
   }
-  $('kgen').disabled=!words.length;
+  kBusy=false;$('kgen').disabled=!words.length;
 });
 const OUT=()=>$('outro').checked?2.4:0;
 function popText(x,y,sz,col,t0,ot,maxw){
@@ -598,7 +598,7 @@ function draw(t){
 }
 
 function refresh(){
-  const ok=words.length>0&&!!buf;
+  const ok=words.length>0&&!!buf;$('kgen').disabled=!words.length||kBusy;$('metaBtn').disabled=!words.length;
   $('prev').disabled=!ok||!!mode;$('rec').disabled=!ok||!!mode||!window.MediaRecorder;
   draw(0);
 }
