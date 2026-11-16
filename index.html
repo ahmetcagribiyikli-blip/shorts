@@ -45,7 +45,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 #metaStatus{min-height:24px;font-size:15px;margin-top:8px}
 #metaStatus.err{color:var(--err)}
 #pxKey{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
-#hookStyle,#kvoice{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
+#hookStyle,#kvoice,#clipStyle{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
 #kStatus{min-height:24px;font-size:15px}
 #kStatus.err{color:var(--err)}
 #chName{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
@@ -88,7 +88,13 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <div class="hint">Birden fazla seçersen sahnelere sırayla dağıtılır. Tek video seçersen baştan sona akar. En iyisi, anlattığın işlemi telefonda ekran kaydıyla çekmek.</div>
 <div class="hint">Her sahneye otomatik gerçek stok video koyar. Anahtar gerekir. Pexels şu an yeni anahtar vermiyor, bu yüzden <a href="https://pixabay.com/api/docs/" target="_blank" rel="noopener">Pixabay</a>’de ücretsiz hesap açıp o sayfada görünen anahtarı yapıştır. Pexels anahtarın varsa o da çalışır. Klipler veri harcar, Wi-Fi’de dene.</div>
 <input id="pxKey" type="text" placeholder="Pixabay veya Pexels API anahtarı" autocomplete="off" autocapitalize="off" spellcheck="false">
-<div class="row"><button id="pxFind">Klipleri bul</button></div>
+<select id="clipStyle" aria-label="Klip stili">
+<option value="auto">Klip stili: Karışık (önerilen)</option>
+<option value="cine">Klip stili: Sinematik</option>
+<option value="close">Klip stili: Yakın plan</option>
+<option value="night">Klip stili: Gece şehir</option>
+</select>
+<div class="row"><button id="pxFind">Klipleri bul (her basışta yeni)</button></div>
 <div id="pxStatus" role="status"></div>
 </section>
 
@@ -457,7 +463,7 @@ function sfx(sink0,tz){
   bus.gain.setValueAtTime(vol*.5,tz+Math.max(.5,total-1.2));bus.gain.linearRampToValueAtTime(0,tz+total);
 }
 let activeV=null;
-const KTERM={card:['credit card payment','paying with card'],coins:['cash money savings','counting money','piggy bank coins'],down:['stressed person bills','worried man laptop'],up:['stock market growth','business growth chart'],shield:['family home security','happy family home'],stat:['calculator finance numbers','business charts desk'],pie:['budget planning notebook','calculator budget'],home:['house keys apartment','neighborhood houses'],clock:['clock time passing','calendar planning'],target:['dartboard target','planning goals desk'],bulb:['idea light bulb','thinking person notebook'],badge:['city business people walking','modern office work']};
+const KTERM={card:['credit card payment','paying with card','contactless payment','shopping checkout','swiping credit card','online shopping laptop'],coins:['cash money savings','counting money','piggy bank coins','dollar bills falling','wallet cash','golden coins'],down:['stressed person bills','worried man laptop','empty wallet','rain window sad','arguing couple bills','stock market crash red'],up:['stock market growth','business growth chart','city skyline sunrise','plant growing time lapse','rocket launch','success celebration'],shield:['family home security','happy family home','safe lock vault','umbrella rain protection','shield protection','smiling family kitchen'],stat:['calculator finance numbers','business charts desk','data analytics screen','typing laptop numbers','spreadsheet monitor','accountant desk'],pie:['budget planning notebook','calculator budget','planning finances table','writing notes desk','piggy bank','home budget'],home:['house keys apartment','neighborhood houses','moving boxes apartment','modern house exterior','real estate sign','kitchen home interior'],clock:['clock time passing','calendar planning','hourglass sand','time lapse city','calendar pages flipping','alarm clock morning'],target:['dartboard target','planning goals desk','climbing mountain','chess strategy','checklist writing','running track'],bulb:['idea light bulb','thinking person notebook','lightbulb moment','brainstorm sticky notes','person thinking window','reading book coffee'],badge:['city business people walking','modern office work','busy city street','people phone walking','coffee shop laptop','night city traffic']};
 function vbg(sc,t,local){
   const v=sc.vid;
   if(mode&&activeV!==v){if(activeV)activeV.pause();activeV=v;v.currentTime=0;v.play().catch(()=>{})}
@@ -468,30 +474,55 @@ function vbg(sc,t,local){
 }
 function pst(m,err){const e=$('pxStatus');e.textContent=m||'';e.className=err?'err':''}
 try{$('pxKey').value=localStorage.getItem('pxkey')||''}catch(e){}
+const STOPW=new Set('about after again also because been before being between both could does doing down during each even from have having here into just like made make many more most much must only other over same should some such than that their them then there these they this those through very want were what when where which while with would your yours will been get got how why who our out its not and the for are but you was can has had one two any all new never always every keep need needs found find check type enter open look choose pick'.split(' '));
+function keyWords(txt){
+  const ws=txt.toLowerCase().replace(/[^a-z\s'-]/g,' ').split(/\s+/).map(w=>w.replace(/^['-]+|['-]+$/g,'')).filter(w=>w.length>3&&!STOPW.has(w));
+  const VIS=new Set('mailbox mail credit card cards bank banks money cash coins wallet house home rent apartment phone laptop computer tax taxes paycheck salary job office retirement savings savings debt loan bills bill statement receipt calculator budget screen app store shopping car insurance family kitchen city street clock calendar document documents paper letter envelope password lock safe vault building worker customer boss'.split(' '));
+  const sc=w=>(VIS.has(w)?100:0)-(/(ing|ies|ion|ment)$/.test(w)?6:0)+w.length;
+  return [...new Set(ws)].sort((a,b)=>sc(b)-sc(a)).slice(0,3);
+}
+const MODS={auto:['','cinematic','close up','slow motion','aerial','night'],cine:['cinematic'],close:['close up'],night:['night city']};
 $('pxFind').addEventListener('click',async()=>{
   const key=$('pxKey').value.trim();
   if(!key){pst('Önce API anahtarını yapıştır.',true);return}
   if(!scenes.length){pst('Önce senaryoyu yapıştır.',true);return}
   try{localStorage.setItem('pxkey',key)}catch(e){}
   $('pxFind').disabled=true;
-  const cache={},used={},kc={};let ok=0,stage='search';
+  const pix=/^\d+-[0-9a-f]+$/i.test(key);
+  const mods=MODS[$('clipStyle').value]||MODS.auto,seed=Math.floor(Math.random()*7);
+  let recent=[];try{recent=JSON.parse(localStorage.getItem('pxUsed')||'[]')}catch(e){}
+  const recentSet=new Set(recent),usedNow=new Set(),cache={};let ok=0,stage='search';
+  scenes.forEach(sc=>{sc.vid=null});
+  const search=async q=>{
+    if(cache[q])return cache[q];
+    stage='search';
+    let r;
+    if(pix)r=await fetch('https://pixabay.com/api/videos/?key='+encodeURIComponent(key)+'&q='+encodeURIComponent(q)+'&per_page=60&safesearch=true');
+    else r=await fetch('https://api.pexels.com/videos/search?query='+encodeURIComponent(q)+'&orientation=portrait&size=medium&per_page=40',{headers:{Authorization:key}});
+    if(r.status===401||(pix&&r.status===400))throw new Error('KEY');
+    if(!r.ok)throw new Error('Arama hata verdi ('+r.status+').');
+    const j=await r.json();
+    return cache[q]=pix?(j.hits||[]):(j.videos||[]);
+  };
   for(let i=0;i<scenes.length;i++){
-    const sc=scenes[i],arr=KTERM[sc.kind]||KTERM.badge;kc[sc.kind]=(kc[sc.kind]||0)+1;const q=arr[(kc[sc.kind]-1)%arr.length];
+    const sc=scenes[i];
     pst('Klip aranıyor '+(i+1)+'/'+scenes.length+'…');
     try{
-      stage='search';
-      const pix=/^\d+-[0-9a-f]+$/i.test(key);
-      if(!cache[q]){
-        let r;
-        if(pix)r=await fetch('https://pixabay.com/api/videos/?key='+encodeURIComponent(key)+'&q='+encodeURIComponent(q)+'&per_page=12&safesearch=true');
-        else r=await fetch('https://api.pexels.com/videos/search?query='+encodeURIComponent(q)+'&orientation=portrait&size=medium&per_page=10',{headers:{Authorization:key}});
-        if(r.status===401||(pix&&r.status===400))throw new Error('KEY');
-        if(!r.ok)throw new Error('Arama hata verdi ('+r.status+').');
-        const j=await r.json();
-        cache[q]=pix?(j.hits||[]):(j.videos||[]);
-      }
-      const list=cache[q];if(!list.length)continue;
-      used[q]=used[q]||0;const vd=list[used[q]%list.length];used[q]++;
+      const kw=keyWords(words.slice(sc.s,sc.e).map(w=>w.x).join(' '));
+      const mod=sc.hook?(mods[1]||mods[0]):mods[i%mods.length];
+      const arr=KTERM[sc.kind]||KTERM.badge,kt=arr[(i+seed)%arr.length],qs=[];
+      if(kw[0])qs.push((kw[0]+' '+mod).trim());
+      if(kw[0]&&kw[1])qs.push(kw[0]+' '+kw[1]);
+      qs.push((kt+' '+mod).trim());qs.push(kt);
+      let list=[];
+      for(const q of qs){const l=await search(q);if(l.length>=4){list=l;break}if(l.length>list.length)list=l}
+      if(!list.length)continue;
+      let pool=list.filter(v=>!usedNow.has(v.id));
+      const fresh=pool.filter(v=>!recentSet.has(v.id));if(fresh.length>=3)pool=fresh;
+      if(pix){const por=pool.filter(v=>{const c=v.videos&&(v.videos.medium||v.videos.large);return c&&c.height>c.width});if(por.length>=3)pool=por}
+      if(!pool.length)continue;
+      const vd=pool[Math.floor(Math.random()*pool.length)];
+      usedNow.add(vd.id);
       let link='';
       if(pix){
         const V=vd.videos||{};
@@ -508,14 +539,15 @@ $('pxFind').addEventListener('click',async()=>{
       const blob=await fr.blob();
       const v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.preload='auto';v.src=URL.createObjectURL(blob);
       await new Promise((res,rej)=>{v.onloadeddata=res;v.onerror=()=>rej(new Error('Klip açılamadı.'));setTimeout(res,15000)});
-      sc.vid=v;ok++;
+      sc.vid=v;ok++;recent.push(vd.id);
     }catch(e){
       if(e&&e.message==='KEY'){pst('Anahtar geçersiz. Anahtarı kontrol et.',true);$('pxFind').disabled=false;return}
       if(e instanceof TypeError){pst(stage==='download'?'Klip indirme tarayıcı tarafından engellendi. Animasyonlarla devam edebilirsin.':'Stok sitesine bağlanılamadı. İnterneti ve anahtarı kontrol et.',true);$('pxFind').disabled=false;draw(0);return}
     }
   }
+  try{localStorage.setItem('pxUsed',JSON.stringify(recent.slice(-80)))}catch(e){}
   $('pxFind').disabled=false;
-  pst(ok+'/'+scenes.length+' sahneye klip bulundu. Kalanlarda animasyon kullanılır.');
+  pst(ok+'/'+scenes.length+' sahneye klip bulundu. Beğenmediysen tekrar bas, yeni klipler gelir.');
   draw(0);
 });
 const STOP=new Set('about after again also because been before being between both could does doing down during each even from have having here into just like made make many more most much must only other over same should some such than that their them then there these they this those through very want were what when where which while with would your yours will been get got how why who our out its not and the for are but you was can has had one two any all new'.split(' '));
