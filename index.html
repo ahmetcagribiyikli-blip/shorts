@@ -44,7 +44,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 #metaOut button{width:100%;margin-top:8px}
 #metaStatus{min-height:24px;font-size:15px;margin-top:8px}
 #metaStatus.err{color:var(--err)}
-#pxKey{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
+#pxKey,#proxyUrl{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
 #hookStyle,#kvoice,#clipStyle{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
 #kStatus{min-height:24px;font-size:15px}
 #kStatus.err{color:var(--err)}
@@ -88,6 +88,7 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <div class="hint">Birden fazla seçersen sahnelere sırayla dağıtılır. Tek video seçersen baştan sona akar. En iyisi, anlattığın işlemi telefonda ekran kaydıyla çekmek.</div>
 <div class="hint">Her sahneye otomatik gerçek stok video koyar. Anahtar gerekir. Pexels şu an yeni anahtar vermiyor, bu yüzden <a href="https://pixabay.com/api/docs/" target="_blank" rel="noopener">Pixabay</a>’de ücretsiz hesap açıp o sayfada görünen anahtarı yapıştır. Pexels anahtarın varsa o da çalışır. Klipler veri harcar, Wi-Fi’de dene.</div>
 <input id="pxKey" type="text" placeholder="Pixabay veya Pexels API anahtarı" autocomplete="off" autocapitalize="off" spellcheck="false">
+<input id="proxyUrl" type="text" placeholder="Proxy adresi (klip indirme engellenirse, isteğe bağlı)" autocomplete="off" autocapitalize="off" spellcheck="false">
 <select id="clipStyle" aria-label="Klip stili">
 <option value="auto">Klip stili: Karışık (önerilen)</option>
 <option value="cine">Klip stili: Sinematik</option>
@@ -473,7 +474,7 @@ function vbg(sc,t,local){
   g.fillStyle=sh;g.fillRect(0,0,W,H);
 }
 function pst(m,err){const e=$('pxStatus');e.textContent=m||'';e.className=err?'err':''}
-try{$('pxKey').value=localStorage.getItem('pxkey')||''}catch(e){}
+try{$('pxKey').value=localStorage.getItem('pxkey')||'';$('proxyUrl').value=localStorage.getItem('pxproxy')||''}catch(e){}
 const STOPW=new Set('about after again also because been before being between both could does doing down during each even from have having here into just like made make many more most much must only other over same should some such than that their them then there these they this those through very want were what when where which while with would your yours will been get got how why who our out its not and the for are but you was can has had one two any all new never always every keep need needs found find check type enter open look choose pick'.split(' '));
 function keyWords(txt){
   const ws=txt.toLowerCase().replace(/[^a-z\s'-]/g,' ').split(/\s+/).map(w=>w.replace(/^['-]+|['-]+$/g,'')).filter(w=>w.length>3&&!STOPW.has(w));
@@ -486,7 +487,7 @@ $('pxFind').addEventListener('click',async()=>{
   const key=$('pxKey').value.trim();
   if(!key){pst('Önce API anahtarını yapıştır.',true);return}
   if(!scenes.length){pst('Önce senaryoyu yapıştır.',true);return}
-  try{localStorage.setItem('pxkey',key)}catch(e){}
+  try{localStorage.setItem('pxkey',key);localStorage.setItem('pxproxy',$('proxyUrl').value.trim())}catch(e){}
   $('pxFind').disabled=true;
   const pix=/^\d+-[0-9a-f]+$/i.test(key);
   const mods=MODS[$('clipStyle').value]||MODS.auto,seed=Math.floor(Math.random()*7);
@@ -543,7 +544,8 @@ $('pxFind').addEventListener('click',async()=>{
       }
       if(!link){fails.push('klip bağlantısı yok');continue}
       stage='download';
-      const fr=await fetch(link);
+      const px=$('proxyUrl').value.trim().replace(/\/+$/,'');
+      const fr=await fetch(px?px+'/?url='+encodeURIComponent(link):link);
       if(!fr.ok)throw new Error('Klip indirilemedi ('+fr.status+')');
       const blob=await fr.blob();
       if(blob.size<20000)throw new Error('Klip boş geldi');
@@ -551,7 +553,7 @@ $('pxFind').addEventListener('click',async()=>{
       await sleep(150);
     }catch(e){
       if(e&&e.message==='KEY'){pst('Anahtar geçersiz. Anahtarı kontrol et.',true);$('pxFind').disabled=false;return}
-      if(e instanceof TypeError){pst(stage==='download'?'Klip indirme tarayıcı tarafından engellendi. Animasyonlarla devam edebilirsin.':'Stok sitesine bağlanılamadı. İnterneti ve anahtarı kontrol et.',true);$('pxFind').disabled=false;draw(0);return}
+      if(e instanceof TypeError){pst(stage==='download'?'Klip indirme tarayıcı tarafından engellendi. Proxy adresi gerekir ya da “Kendi videolarını ekle”yi kullan.':'Stok sitesine bağlanılamadı. İnterneti ve anahtarı kontrol et.',true);$('pxFind').disabled=false;draw(0);return}
       fails.push((e&&e.message)||'bilinmeyen hata');
     }
   }
