@@ -84,9 +84,9 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 
 <section>
 <h2><span class="n">3</span>Görüntü (isteğe bağlı)</h2>
-<label class="file"><input type="file" id="ownClips" multiple><span id="ownName">Kendi videolarını ekle (ekran kaydı gibi)</span></label>
-<div class="hint">Birden fazla seçersen sahnelere sırayla dağıtılır. Tek video seçersen baştan sona akar. En iyisi, anlattığın işlemi telefonda ekran kaydıyla çekmek.</div>
-<div class="hint">Her sahneye otomatik gerçek stok video koyar. Anahtar gerekir. Pexels şu an yeni anahtar vermiyor, bu yüzden <a href="https://pixabay.com/api/docs/" target="_blank" rel="noopener">Pixabay</a>’de ücretsiz hesap açıp o sayfada görünen anahtarı yapıştır. Pexels anahtarın varsa o da çalışır. Klipler veri harcar, Wi-Fi’de dene.</div>
+<label class="file"><input type="file" id="ownClips" accept="video/*,image/*" multiple><span id="ownName">Kendi video veya fotoğraflarını ekle</span></label>
+<div class="hint">Video ve fotoğraf (JPG/PNG/WebP) karışık seçebilirsin. Fotoğraflar otomatik 9:16 kırpılır ve sahne boyunca sinematik <b>zoom-in</b> efekti uygulanır. Birden fazla seçersen sahnelere sırayla dağıtılır.</div>
+<div class="hint">Her sahneye otomatik gerçek stok video koyar. Anahtar gerekir. Pexels şu an yeni anahtar vermiyor, bu yüzden <a href="https://pixabay.com/api/docs/" target="_blank" rel="noopener">Pixabay</a>’de ücretsiz hesap açıp o sayfada görünen anahtarı yapıştır. Pexels anahtarın varsa o da çalışır; eşleşme bulunamayan son sahnelere otomatik yedek (fallback) klip atanır.</div>
 <input id="pxKey" type="text" placeholder="Pixabay veya Pexels API anahtarı" autocomplete="off" autocapitalize="off" spellcheck="false">
 <select id="clipStyle" aria-label="Klip stili">
 <option value="auto">Klip stili: Karışık (önerilen)</option>
@@ -462,26 +462,75 @@ function sfx(sink0,tz){
   }
   bus.gain.setValueAtTime(vol*.5,tz+Math.max(.5,total-1.2));bus.gain.linearRampToValueAtTime(0,tz+total);
 }
+
 let activeV=null;
-const KTERM={card:['credit card payment','paying with card','contactless payment','shopping checkout','swiping credit card','online shopping laptop'],coins:['cash money savings','counting money','piggy bank coins','dollar bills falling','wallet cash','golden coins'],down:['stressed person bills','worried man laptop','empty wallet','rain window sad','arguing couple bills','stock market crash red'],up:['stock market growth','business growth chart','city skyline sunrise','plant growing time lapse','rocket launch','success celebration'],shield:['family home security','happy family home','safe lock vault','umbrella rain protection','shield protection','smiling family kitchen'],stat:['calculator finance numbers','business charts desk','data analytics screen','typing laptop numbers','spreadsheet monitor','accountant desk'],pie:['budget planning notebook','calculator budget','planning finances table','writing notes desk','piggy bank','home budget'],home:['house keys apartment','neighborhood houses','moving boxes apartment','modern house exterior','real estate sign','kitchen home interior'],clock:['clock time passing','calendar planning','hourglass sand','time lapse city','calendar pages flipping','alarm clock morning'],target:['dartboard target','planning goals desk','climbing mountain','chess strategy','checklist writing','running track'],bulb:['idea light bulb','thinking person notebook','lightbulb moment','brainstorm sticky notes','person thinking window','reading book coffee'],badge:['city business people walking','modern office work','busy city street','people phone walking','coffee shop laptop','night city traffic']};
-function vbg(sc,t,local){
-  const v=sc.vid;
-  if(mode&&activeV!==v){if(activeV)activeV.pause();activeV=v;v.currentTime=0;v.play().catch(()=>{})}
-  const vw=v.videoWidth||1080,vh=v.videoHeight||1920,z=Math.max(W/vw,H/vh)*(1.04+Math.min(local,2.5)*.012);
-  g.save();g.translate(W/2,H/2);g.scale(z,z);g.drawImage(v,-vw/2,-vh/2);g.restore();
-  const sh=g.createLinearGradient(0,0,0,H);sh.addColorStop(0,'rgba(0,0,0,.45)');sh.addColorStop(.5,'rgba(0,0,0,.28)');sh.addColorStop(1,'rgba(0,0,0,.6)');
+const KTERM={
+  card:['credit card payment','paying with card','contactless payment','shopping checkout','swiping credit card','online shopping laptop'],
+  coins:['cash money savings','counting money','piggy bank coins','dollar bills falling','wallet cash','golden coins'],
+  down:['stressed person bills','worried man laptop','empty wallet','rain window sad','arguing couple bills','stock market crash red'],
+  up:['stock market growth','business growth chart','city skyline sunrise','plant growing time lapse','rocket launch','success celebration'],
+  shield:['family home security','happy family home','safe lock vault','umbrella rain protection','shield protection','smiling family kitchen'],
+  stat:['calculator finance numbers','business charts desk','data analytics screen','typing laptop numbers','spreadsheet monitor','accountant desk'],
+  pie:['budget planning notebook','calculator budget','planning finances table','writing notes desk','piggy bank','home budget'],
+  home:['house keys apartment','neighborhood houses','moving boxes apartment','modern house exterior','real estate sign','kitchen home interior'],
+  clock:['clock time passing','calendar planning','hourglass sand','time lapse city','calendar pages flipping','alarm clock morning'],
+  target:['dartboard target','planning goals desk','climbing mountain','chess strategy','checklist writing','running track'],
+  bulb:['idea light bulb','thinking person notebook','lightbulb moment','brainstorm sticky notes','person thinking window','reading book coffee'],
+  badge:['city business people walking','modern office work','busy city street','people phone walking','coffee shop laptop','night city traffic'],
+  fallback:['money finance business','modern city skyline','people working office','calculator desk','golden coins abstract','stock market screen','cash dollar bills','success business']
+};
+
+/* Hem Video hem Fotoğrafı (Zoom-In + 9:16 Optimize) Çizen Fonksiyon */
+function mbg(sc,t,local){
+  const m=sc.media;
+  if(!m)return;
+  if(m.type==='video'){
+    const v=m.el;
+    if(mode&&activeV!==v){if(activeV)activeV.pause();activeV=v;v.currentTime=0;v.play().catch(()=>{})}
+    const vw=v.videoWidth||1080,vh=v.videoHeight||1920;
+    const baseScale=Math.max(W/vw,H/vh);
+    const z=baseScale*(1.03+Math.min(local,4)*.012);
+    g.save();g.translate(W/2,H/2);g.scale(z,z);g.drawImage(v,-vw/2,-vh/2);g.restore();
+  }else if(m.type==='image'){
+    if(activeV){activeV.pause();activeV=null}
+    const img=m.el;
+    const iw=img.naturalWidth||1080,ih=img.naturalHeight||1920;
+    // 9:16 tam kaplama (cover) ölçeği
+    const coverScale=Math.max(W/iw,H/ih);
+    // Sahne süresine göre akıcı sinematik zoom-in (1.00 -> 1.18 arası)
+    const scDur=Math.max(1.5,(words[sc.e-1].t1-words[sc.s].t0)*dur());
+    const prog=Math.min(1,local/scDur);
+    // Yumuşak ease-out zoom
+    const ease=1-Math.pow(1-prog,1.6);
+    const zoomFactor=1.0+0.18*ease;
+    const z=coverScale*zoomFactor;
+    // Hafif dikey/yatay kaydırma (Ken Burns hissi)
+    const panY=-18*ease;
+    g.save();
+    g.translate(W/2,H/2+panY);
+    g.scale(z,z);
+    g.drawImage(img,-iw/2,-ih/2);
+    g.restore();
+  }
+  // Metin okunabilirliği için sinematik karartma katmanı
+  const sh=g.createLinearGradient(0,0,0,H);
+  sh.addColorStop(0,'rgba(0,0,0,.45)');
+  sh.addColorStop(.5,'rgba(0,0,0,.26)');
+  sh.addColorStop(1,'rgba(0,0,0,.62)');
   g.fillStyle=sh;g.fillRect(0,0,W,H);
 }
+
 function pst(m,err){const e=$('pxStatus');e.textContent=m||'';e.className=err?'err':''}
 try{$('pxKey').value=localStorage.getItem('pxkey')||''}catch(e){}
 const STOPW=new Set('about after again also because been before being between both could does doing down during each even from have having here into just like made make many more most much must only other over same should some such than that their them then there these they this those through very want were what when where which while with would your yours will been get got how why who our out its not and the for are but you was can has had one two any all new never always every keep need needs found find check type enter open look choose pick'.split(' '));
 function keyWords(txt){
   const ws=txt.toLowerCase().replace(/[^a-z\s'-]/g,' ').split(/\s+/).map(w=>w.replace(/^['-]+|['-]+$/g,'')).filter(w=>w.length>3&&!STOPW.has(w));
-  const VIS=new Set('mailbox mail credit card cards bank banks money cash coins wallet house home rent apartment phone laptop computer tax taxes paycheck salary job office retirement savings savings debt loan bills bill statement receipt calculator budget screen app store shopping car insurance family kitchen city street clock calendar document documents paper letter envelope password lock safe vault building worker customer boss'.split(' '));
+  const VIS=new Set('mailbox mail credit card cards bank banks money cash coins wallet house home rent apartment phone laptop computer tax taxes paycheck salary job office retirement savings debt loan bills bill statement receipt calculator budget screen app store shopping car insurance family kitchen city street clock calendar document documents paper letter envelope password lock safe vault building worker customer boss'.split(' '));
   const sc=w=>(VIS.has(w)?100:0)-(/(ing|ies|ion|ment)$/.test(w)?6:0)+w.length;
   return [...new Set(ws)].sort((a,b)=>sc(b)-sc(a)).slice(0,3);
 }
 const MODS={auto:['','cinematic','close up','slow motion','aerial','night'],cine:['cinematic'],close:['close up'],night:['night city']};
+
 $('pxFind').addEventListener('click',async()=>{
   const key=$('pxKey').value.trim();
   if(!key){pst('Önce API anahtarını yapıştır.',true);return}
@@ -492,64 +541,109 @@ $('pxFind').addEventListener('click',async()=>{
   const mods=MODS[$('clipStyle').value]||MODS.auto,seed=Math.floor(Math.random()*7);
   let recent=[];try{recent=JSON.parse(localStorage.getItem('pxUsed')||'[]')}catch(e){}
   const recentSet=new Set(recent),usedNow=new Set(),cache={};let ok=0,stage='search';
-  scenes.forEach(sc=>{sc.vid=null});
-  const search=async q=>{
-    if(cache[q])return cache[q];
+  scenes.forEach(sc=>{sc.media=null});
+
+  const search=async (q,page=1)=>{
+    const ck=q+'|'+page;
+    if(cache[ck])return cache[ck];
     stage='search';
     let r;
-    if(pix)r=await fetch('https://pixabay.com/api/videos/?key='+encodeURIComponent(key)+'&q='+encodeURIComponent(q)+'&per_page=60&safesearch=true');
-    else r=await fetch('https://api.pexels.com/videos/search?query='+encodeURIComponent(q)+'&orientation=portrait&size=medium&per_page=40',{headers:{Authorization:key}});
+    if(pix)r=await fetch('https://pixabay.com/api/videos/?key='+encodeURIComponent(key)+'&q='+encodeURIComponent(q)+'&per_page=50&page='+page+'&safesearch=true');
+    else r=await fetch('https://api.pexels.com/videos/search?query='+encodeURIComponent(q)+'&orientation=portrait&size=medium&per_page=40&page='+page,{headers:{Authorization:key}});
     if(r.status===401||(pix&&r.status===400))throw new Error('KEY');
     if(!r.ok)throw new Error('Arama hata verdi ('+r.status+').');
     const j=await r.json();
-    return cache[q]=pix?(j.hits||[]):(j.videos||[]);
+    return cache[ck]=pix?(j.hits||[]):(j.videos||[]);
   };
+
   for(let i=0;i<scenes.length;i++){
     const sc=scenes[i];
     pst('Klip aranıyor '+(i+1)+'/'+scenes.length+'…');
     try{
       const kw=keyWords(words.slice(sc.s,sc.e).map(w=>w.x).join(' '));
       const mod=sc.hook?(mods[1]||mods[0]):mods[i%mods.length];
-      const arr=KTERM[sc.kind]||KTERM.badge,kt=arr[(i+seed)%arr.length],qs=[];
+      const arr=KTERM[sc.kind]||KTERM.badge;
+      const kt=arr[(i+seed)%arr.length];
+      const fb=KTERM.fallback[(i+seed)%KTERM.fallback.length];
+
+      // Öncelikli sorgular + Son sahnelerde tükenmeyi önleyen güçlü Fallback (Yedek) sorguları
+      const qs=[];
       if(kw[0])qs.push((kw[0]+' '+mod).trim());
       if(kw[0]&&kw[1])qs.push(kw[0]+' '+kw[1]);
-      qs.push((kt+' '+mod).trim());qs.push(kt);
-      let list=[];
-      for(const q of qs){const l=await search(q);if(l.length>=4){list=l;break}if(l.length>list.length)list=l}
-      if(!list.length)continue;
-      let pool=list.filter(v=>!usedNow.has(v.id));
-      const fresh=pool.filter(v=>!recentSet.has(v.id));if(fresh.length>=3)pool=fresh;
-      if(pix){const por=pool.filter(v=>{const c=v.videos&&(v.videos.medium||v.videos.large);return c&&c.height>c.width});if(por.length>=3)pool=por}
-      if(!pool.length)continue;
-      const vd=pool[Math.floor(Math.random()*pool.length)];
-      usedNow.add(vd.id);
+      if(kw[0])qs.push(kw[0]);
+      qs.push((kt+' '+mod).trim());
+      qs.push(kt);
+      qs.push(fb);
+      qs.push('finance money');
+      qs.push('business city');
+
+      let chosenVd=null;
+      for(const q of qs){
+        let l=await search(q,1);
+        // Eğer 1. sayfadaki tüm videolar zaten kullanıldıysa 2. sayfaya bak
+        let avail=l.filter(v=>!usedNow.has(v.id));
+        if(!avail.length && l.length>=15){
+          const l2=await search(q,2);
+          avail=l2.filter(v=>!usedNow.has(v.id));
+        }
+        if(!avail.length)continue;
+
+        // Daha önce hiç kullanılmamışları tercih et, kalmadıysa mevcut kullanılmayan havuzdan al
+        const fresh=avail.filter(v=>!recentSet.has(v.id));
+        let pool=fresh.length>=1?fresh:avail;
+
+        // Dikey (portrait) videoları önceliklendir
+        if(pix){
+          const por=pool.filter(v=>{const c=v.videos&&(v.videos.medium||v.videos.large);return c&&c.height>=c.width});
+          if(por.length>=1)pool=por;
+        }
+        if(pool.length){
+          chosenVd=pool[Math.floor(Math.random()*pool.length)];
+          break;
+        }
+      }
+
+      if(!chosenVd)continue;
+      usedNow.add(chosenVd.id);
+
       let link='';
       if(pix){
-        const V=vd.videos||{};
+        const V=chosenVd.videos||{};
         const c=(V.large&&V.large.url&&V.large.size&&V.large.size<=30e6)?V.large:(V.medium&&V.medium.url?V.medium:V.small);
         link=(c&&c.url)||'';
       }else{
-        const files=(vd.video_files||[]).filter(f=>f.file_type==='video/mp4'&&f.width&&f.height>=f.width).sort((a,b)=>Math.abs(a.width-720)-Math.abs(b.width-720));
-        link=files.length?files[0].link:'';
+        const files=(chosenVd.video_files||[]).filter(f=>f.file_type==='video/mp4'&&f.width&&f.height>=f.width).sort((a,b)=>Math.abs(a.width-720)-Math.abs(b.width-720));
+        if(!files.length){
+          const anyFiles=(chosenVd.video_files||[]).filter(f=>f.file_type==='video/mp4'&&f.width).sort((a,b)=>Math.abs(a.width-720)-Math.abs(b.width-720));
+          link=anyFiles.length?anyFiles[0].link:'';
+        }else{
+          link=files[0].link;
+        }
       }
       if(!link)continue;
+
       stage='download';
       const fr=await fetch(link);
       if(!fr.ok)throw new Error('Klip indirilemedi.');
       const blob=await fr.blob();
-      const v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.preload='auto';v.src=URL.createObjectURL(blob);
+      const v=document.createElement('video');
+      v.muted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.preload='auto';
+      v.src=URL.createObjectURL(blob);
       await new Promise((res,rej)=>{v.onloadeddata=res;v.onerror=()=>rej(new Error('Klip açılamadı.'));setTimeout(res,15000)});
-      sc.vid=v;ok++;recent.push(vd.id);
+      sc.media={type:'video',el:v};
+      ok++;
+      recent.push(chosenVd.id);
     }catch(e){
       if(e&&e.message==='KEY'){pst('Anahtar geçersiz. Anahtarı kontrol et.',true);$('pxFind').disabled=false;return}
       if(e instanceof TypeError){pst(stage==='download'?'Klip indirme tarayıcı tarafından engellendi. Animasyonlarla devam edebilirsin.':'Stok sitesine bağlanılamadı. İnterneti ve anahtarı kontrol et.',true);$('pxFind').disabled=false;draw(0);return}
     }
   }
-  try{localStorage.setItem('pxUsed',JSON.stringify(recent.slice(-80)))}catch(e){}
+  try{localStorage.setItem('pxUsed',JSON.stringify(recent.slice(-120)))}catch(e){}
   $('pxFind').disabled=false;
   pst(ok+'/'+scenes.length+' sahneye klip bulundu. Beğenmediysen tekrar bas, yeni klipler gelir.');
   draw(0);
 });
+
 const STOP=new Set('about after again also because been before being between both could does doing down during each even from have having here into just like made make many more most much must only other over same should some such than that their them then there these they this those through very want were what when where which while with would your yours will been get got how why who our out its not and the for are but you was can has had one two any all new'.split(' '));
 function genMeta(){
   const clean=words.map(w=>w.x).join(' ').replace(/\s+/g,' ').trim();
@@ -577,6 +671,7 @@ $('metaBtn').addEventListener('click',()=>{
   if(!words.length)return;
   const m=genMeta();$('mTitle').value=m.title;$('mDesc').value=m.desc;$('mTags').value=m.tags;$('metaOut').hidden=false;say2('');
 });
+
 let tts=null,genBuf=false,kBusy=false;
 function estTimes(){const tot=words.reduce((n,w)=>n+w.wt,0);let acc=0;words.forEach(w=>{w.t0=acc/tot;acc+=w.wt;w.t1=acc/tot})}
 function kst(m,err){const e=$('kStatus');e.textContent=m||'';e.className=err?'err':''}
@@ -620,6 +715,7 @@ $('kgen').addEventListener('click',async()=>{
   }
   kBusy=false;$('kgen').disabled=!words.length;
 });
+
 const OUT=()=>$('outro').checked?2.4:0;
 function popText(x,y,sz,col,t0,ot,maxw){
   const p=(ot-t0)/.3;if(p<=0)return;
@@ -651,6 +747,7 @@ function watermark(){
 }
 try{$('chName').value=localStorage.getItem('chname')||''}catch(e){}
 $('chName').addEventListener('input',()=>{try{localStorage.setItem('chname',$('chName').value)}catch(e){}if(!mode)draw(0)});
+
 function extras(sc,t){
   const st=(sc.idx||0)%6,c=sc.pal;
   g.save();
@@ -716,21 +813,41 @@ function drawBulb(sc,t){
   g.fillStyle=gr;g.beginPath();g.arc(0,-60,190,0,7);g.fill();
   g.fillStyle='#C9CED8';rr(-85,110,170,40,12);g.fill();rr(-70,155,140,40,12);g.fill();
 }
+
+/* Kendi Video ve Fotoğraflarını Yükleme */
 const ownClips=[];
 $('ownClips').addEventListener('change',async e=>{
   const fs=[...e.target.files];if(!fs.length)return;
-  $('ownName').textContent='Videolar hazırlanıyor…';
+  $('ownName').textContent='Medyalar hazırlanıyor…';
   ownClips.length=0;
+  let vCount=0,iCount=0;
   for(const f of fs){
-    const v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.preload='auto';
-    v.src=URL.createObjectURL(f);
-    await new Promise(res=>{v.onloadeddata=res;v.onerror=res;setTimeout(res,10000)});
-    ownClips.push(v);
+    const url=URL.createObjectURL(f);
+    if(f.type.startsWith('image/')){
+      const img=new Image();
+      img.src=url;
+      await new Promise(res=>{img.onload=res;img.onerror=res;setTimeout(res,10000)});
+      if(img.naturalWidth>0){
+        ownClips.push({type:'image',el:img});
+        iCount++;
+      }
+    }else{
+      const v=document.createElement('video');
+      v.muted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.preload='auto';
+      v.src=url;
+      await new Promise(res=>{v.onloadeddata=res;v.onerror=res;setTimeout(res,10000)});
+      ownClips.push({type:'video',el:v});
+      vCount++;
+    }
   }
-  scenes.forEach(sc=>{sc.vid=null});
-  $('ownName').textContent=ownClips.length+' video eklendi';
+  scenes.forEach(sc=>{sc.media=null});
+  const partsTxt=[];
+  if(vCount)partsTxt.push(vCount+' video');
+  if(iCount)partsTxt.push(iCount+' fotoğraf');
+  $('ownName').textContent=partsTxt.length?partsTxt.join(', ')+' eklendi':'Medya yüklenemedi';
   draw(0);
 });
+
 let hookEndT=0;
 function pillDraw(cx,cy,text,col,s,glow){
   const w=400*s,h=140*s;
@@ -757,6 +874,7 @@ $('hookStyle').addEventListener('change',()=>{$('swapRow').style.display=$('hook
 ['swapA','swapB'].forEach(id=>$(id).addEventListener('input',()=>{if(!mode)draw(0)}));
 $('recHook').addEventListener('click',()=>start(true,true));
 $('musVol').addEventListener('input',e=>{$('musv').textContent=Math.round(e.target.value*100)+'%'});
+
 function caps(i,wp){
   const ch=chunks.find(c=>i>=c.a&&i<c.b)||chunks[chunks.length-1];
   g.font='118px Anton, Impact, sans-serif';g.textBaseline='middle';g.lineJoin='round';
@@ -796,8 +914,15 @@ function draw(t){
   let i=words.findIndex(w=>f>=w.t0&&f<w.t1);if(i<0)i=0;
   const sc=scenes.find(s=>i>=s.s&&i<s.e)||scenes[0];
   const local=Math.max(0,t-(words[sc.s].t0*d+off));
-  if(!sc.vid&&ownClips.length)sc.vid=ownClips[sc.idx%ownClips.length];
-  if(sc.vid&&sc.vid.readyState>=2){vbg(sc,t,local);if(sc.kind==='stat'||sc.hook)illus(sc,t,local)}else{bg(sc,t,local);illus(sc,t,local)}
+  if(!sc.media&&ownClips.length)sc.media=ownClips[sc.idx%ownClips.length];
+  const ready=sc.media&&(sc.media.type==='image'?sc.media.el.complete&&sc.media.el.naturalWidth>0:sc.media.el.readyState>=2);
+  if(ready){
+    mbg(sc,t,local);
+    if(sc.kind==='stat'||sc.hook)illus(sc,t,local);
+  }else{
+    bg(sc,t,local);
+    illus(sc,t,local);
+  }
   const w=words[i];if(sc.hook)drawHook(sc,i,t,d);else caps(i,((f-w.t0)*d)/.18);
   g.fillStyle='rgba(255,255,255,.28)';g.fillRect(90,70,W-180,10);
   g.fillStyle='#fff';g.fillRect(90,70,(W-180)*Math.min(1,t/d),10);trans(sc,local);watermark();
