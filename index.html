@@ -121,6 +121,7 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <section>
 <h2><span class="n">4</span>Video</h2>
 <div class="stage"><canvas id="cv" width="1080" height="1920"></canvas></div>
+<div class="row"><button id="thumbRe">Önizlemeleri yenile</button></div>
 <div class="hint" id="useInfo"></div>
 <label class="ml" for="quality">Video kalitesi</label>
 <select id="quality">
@@ -494,7 +495,7 @@ function vbg(sc,t,local){
   const v=sc.vid;
   if(mode&&activeV!==v){if(activeV)activeV.pause();activeV=v;if(v.currentTime>.2)v.currentTime=0;v.play().catch(()=>{})}
   const vw=v.videoWidth||1080,vh=v.videoHeight||1920,z=Math.max(W/vw,H/vh)*(1.04+Math.min(local,2.5)*.012);
-  g.save();g.translate(W/2,H/2);g.scale(z,z);g.drawImage(v,-vw/2,-vh/2);g.restore();
+  g.save();g.translate(W/2,H/2);g.scale(z,z);g.drawImage(v,-vw/2,-vh/2,vw,vh);g.restore();
   const sh=g.createLinearGradient(0,0,0,H);sh.addColorStop(0,'rgba(0,0,0,.45)');sh.addColorStop(.5,'rgba(0,0,0,.28)');sh.addColorStop(1,'rgba(0,0,0,.6)');
   g.fillStyle=sh;g.fillRect(0,0,W,H);
 }
@@ -571,22 +572,29 @@ async function findClip(i,custom,mods,seed,recentSet){
 async function makeThumb(blob){
   const url=URL.createObjectURL(blob);
   const v=document.createElement('video');
-  v.muted=true;v.defaultMuted=true;v.playsInline=true;v.setAttribute('playsinline','');v.setAttribute('muted','');v.preload='auto';
+  v.muted=true;v.defaultMuted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.setAttribute('muted','');v.preload='auto';
   v.src=url;$('vbox').appendChild(v);
-  const wait=(ev,ms)=>new Promise(res=>{let done=false;const f=()=>{if(!done){done=true;res(true)}};v.addEventListener(ev,f,{once:true});setTimeout(()=>{if(!done){done=true;res(false)}},ms)});
+  const nap=ms=>new Promise(z=>setTimeout(z,ms));
   let out='';
   try{
     const pr=v.play();if(pr&&pr.catch)pr.catch(()=>{});
-    if(v.readyState<2)await wait('loadeddata',6000);
+    const t0=Date.now();
+    while(v.readyState<2&&Date.now()-t0<6000)await nap(100);
     if(v.readyState>=2){
-      v.pause();
-      const t=Math.min(1,(v.duration||2)/3);
-      if(t>0){const sk=wait('seeked',3000);v.currentTime=t;await sk}
-      const c=document.createElement('canvas');c.width=180;c.height=320;
-      const x=c.getContext('2d'),vw=v.videoWidth||180,vh=v.videoHeight||320,z=Math.max(180/vw,320/vh);
-      x.fillStyle='#000';x.fillRect(0,0,180,320);
-      x.drawImage(v,(180-vw*z)/2,(320-vh*z)/2,vw*z,vh*z);
-      out=c.toDataURL('image/jpeg',.72);
+      await new Promise(res=>{
+        let done=false;const fin=()=>{if(!done){done=true;res()}};
+        setTimeout(fin,1500);
+        if(v.requestVideoFrameCallback)v.requestVideoFrameCallback(()=>setTimeout(fin,200));else setTimeout(fin,700);
+      });
+      for(let a=0;a<4&&!out;a++){
+        const c=document.createElement('canvas');c.width=180;c.height=320;
+        const x=c.getContext('2d'),vw=v.videoWidth||180,vh=v.videoHeight||320,z=Math.max(180/vw,320/vh);
+        x.fillStyle='#000';x.fillRect(0,0,180,320);
+        x.drawImage(v,(180-vw*z)/2,(320-vh*z)/2,vw*z,vh*z);
+        const px=x.getImageData(0,0,180,320).data;let sum=0,n=0;
+        for(let k=0;k<px.length;k+=1600){sum+=px[k]+px[k+1]+px[k+2];n+=3}
+        if(sum/n>14)out=c.toDataURL('image/jpeg',.72);else await nap(500);
+      }
     }
   }catch(e){out=''}
   try{v.pause();v.removeAttribute('src');v.load()}catch(e){}
@@ -952,6 +960,13 @@ function dropVid(sc){
 function applyQ(){const w=$('quality').value==='1080'?1080:720;cv.width=w;cv.height=Math.round(w*16/9);if(!mode)draw(0)}
 $('quality').addEventListener('change',applyQ);
 applyQ();
+$('thumbRe').addEventListener('click',async()=>{
+  const b=$('thumbRe');b.disabled=true;
+  const list=scenes.filter(x=>x.blob);
+  for(let k=0;k<list.length;k++){pst('Önizleme yenileniyor '+(k+1)+'/'+list.length+'…');list[k].thumb=await makeThumb(list[k].blob)}
+  pst(list.length?'Önizlemeler yenilendi.':'Önce klip bul ya da kendi videolarını ekle.');
+  b.disabled=false;renderScenes();
+});
 function caps(i,wp){
   const ch=chunks.find(c=>i>=c.a&&i<c.b)||chunks[chunks.length-1];
   g.font='118px Anton, Impact, sans-serif';g.textBaseline='middle';g.lineJoin='round';
@@ -1021,7 +1036,15 @@ async function start(record,onlyHook){
   if(!words.length||!buf)return;
   try{
     if(src){try{src.stop()}catch(e){}}if(activeV){activeV.pause();activeV=null}
-    ctx=ctx||new AC();await ctx.resume();
+    ctx=ctx||new AC();
+    try{const sb=ctx.createBuffer(1,1,22050),ss=ctx.createBufferSource();ss.buffer=sb;ss.connect(ctx.destination);ss.start(0)}catch(e){}
+    await ctx.resume();
+    if(ctx.state!=='running'){await new Promise(z=>setTimeout(z,400));try{await ctx.resume()}catch(e){}}
+    if(ctx.state!=='running'){
+      mode=null;refresh();
+      say('Ses sistemi başlamadı (durum: '+ctx.state+'). Telefonun sessiz modunu kapat, sayfayı yenileyip tekrar dene.',true);
+      return;
+    }
     src=ctx.createBufferSource();src.buffer=buf;
     hookEndT=onlyHook?((scenes.length>1?words[scenes[1].s].t0*dur()+off:dur())+.15):0;
     if(record){
@@ -1041,20 +1064,29 @@ async function start(record,onlyHook){
       rec.start(500);
       $('result').hidden=true;
     }else src.connect(ctx.destination);
-    mode=record?'rec':'prev';t0=ctx.currentTime+.15;src.start(t0,0,hookEndT||undefined);sfx(record?sinkDest:ctx.destination,t0);
+    mode=record?'rec':'prev';t0=ctx.currentTime+.15;wallStart=performance.now();if(hookEndT)src.start(t0,0,hookEndT);else src.start(t0);sfx(record?sinkDest:ctx.destination,t0);
     $('prev').disabled=true;$('rec').disabled=true;$('recHook').disabled=true;
     say(record?'Video oluşturuluyor. Ekranı açık tut ve bu sayfadan çıkma.':'Önizleme oynuyor.');
     loop();
   }catch(e){mode=null;refresh();say('Başlatılamadı: '+(e&&e.message||'bilinmeyen hata'),true)}
 }
 
-let lastDraw=0;
+let lastDraw=0,wallStart=0;
+function abortRun(){
+  cancelAnimationFrame(raf);
+  const was=mode;mode=null;
+  try{src.stop()}catch(e){}
+  if(activeV){activeV.pause();activeV=null}
+  if(was==='rec'&&rec&&rec.state!=='inactive'){try{rec.onstop=null;rec.stop()}catch(e){}}
+  refresh();
+}
 function loop(){
   const np=performance.now();
   if(np-lastDraw<30){raf=requestAnimationFrame(loop);return}
   lastDraw=np;
   const t=ctx.currentTime-t0,d=dur();
-  draw(Math.max(0,t));
+  if(t<=0.02&&np-wallStart>2500){say('Ses saati ilerlemiyor (durum: '+ctx.state+'). Sayfayı yenileyip tekrar dene, sorun sürerse başka uygulamaları kapat.',true);abortRun();return}
+  try{draw(Math.max(0,t))}catch(e){say('Çizim hatası: '+((e&&e.message)||e),true);abortRun();return}
   if(t>=(hookEndT?hookEndT+.2:d+OUT()+.5)){finish();return}
   if(mode==='rec')say('Video oluşturuluyor: %'+Math.min(99,Math.round(Math.max(0,t)/d*100))+'. Ekranı açık tut.');
   raf=requestAnimationFrame(loop);
