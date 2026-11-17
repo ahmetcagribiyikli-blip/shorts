@@ -45,7 +45,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 #metaStatus{min-height:24px;font-size:15px;margin-top:8px}
 #metaStatus.err{color:var(--err)}
 #pxKey,#proxyUrl{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
-#hookStyle,#kvoice,#clipStyle{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
+#quality,#hookStyle,#kvoice,#clipStyle{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
 #kStatus{min-height:24px;font-size:15px}
 #kStatus.err{color:var(--err)}
 #chName{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
@@ -54,6 +54,13 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .sct{font-size:14px;color:var(--muted);margin-bottom:6px;line-height:1.4}
 .sc input{width:100%;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:8px}
 .sc button{width:100%}
+.sc .use{display:flex;gap:12px;align-items:center;font-size:15px;font-weight:600;margin-bottom:10px;min-height:34px}
+.sc .use input{-webkit-appearance:none;appearance:none;width:30px;height:30px;min-height:30px;padding:0;margin:0;flex:none;border:2px solid var(--muted);border-radius:8px;background:transparent;position:relative}
+.sc .use input:checked{background:var(--gold);border-color:var(--gold)}
+.sc .use input:checked::after{content:"";position:absolute;left:9px;top:2px;width:8px;height:15px;border:solid #1A1200;border-width:0 3px 3px 0;transform:rotate(45deg)}
+.sc .use input:disabled{opacity:.35}
+.sc .use input{width:22px;height:22px;min-height:0;padding:0;margin:0;border:0;accent-color:var(--gold);flex:none}
+.th.sel{outline:3px solid var(--gold);outline-offset:2px}
 .scbody{display:flex;gap:12px;align-items:flex-start}
 .scr{flex:1;min-width:0}
 .th{width:100px;aspect-ratio:9/16;object-fit:cover;border-radius:12px;background:#000;flex:none;cursor:pointer;display:block}
@@ -94,7 +101,8 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <section>
 <h2><span class="n">3</span>Görüntü (isteğe bağlı)</h2>
 <label class="file"><input type="file" id="ownClips" multiple><span id="ownName">Kendi videolarını ekle (ekran kaydı gibi)</span></label>
-<div class="hint">Birden fazla seçersen sahnelere sırayla dağıtılır. Tek video seçersen baştan sona akar. En iyisi, anlattığın işlemi telefonda ekran kaydıyla çekmek.</div>
+<div class="hint">Birden fazla seçersen sahnelere sırayla dağıtılır. Tek video seçersen baştan sona akar. En iyisi, anlattığın işlemi telefonda ekran kaydıyla çekmek. Eklediğin videolar aşağıdaki listede her sahneye dağıtılır, tik ile seçebilirsin.</div>
+<div class="row"><button id="ownClear">Kendi videolarımı kaldır</button></div>
 <div class="hint">Her sahneye otomatik gerçek stok video koyar. Anahtar gerekir. Pexels şu an yeni anahtar vermiyor, bu yüzden <a href="https://pixabay.com/api/docs/" target="_blank" rel="noopener">Pixabay</a>’de ücretsiz hesap açıp o sayfada görünen anahtarı yapıştır. Pexels anahtarın varsa o da çalışır. Klipler veri harcar, Wi-Fi’de dene.</div>
 <input id="pxKey" type="text" placeholder="Pixabay veya Pexels API anahtarı" autocomplete="off" autocapitalize="off" spellcheck="false">
 <input id="proxyUrl" type="text" placeholder="Proxy adresi (klip indirme engellenirse, isteğe bağlı)" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -113,6 +121,12 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <section>
 <h2><span class="n">4</span>Video</h2>
 <div class="stage"><canvas id="cv" width="1080" height="1920"></canvas></div>
+<div class="hint" id="useInfo"></div>
+<label class="ml" for="quality">Video kalitesi</label>
+<select id="quality">
+<option value="720">Akıcı 720p (önerilen, takılmayı azaltır)</option>
+<option value="1080">Yüksek 1080p (yavaş telefonlarda takılabilir)</option>
+</select>
 <label class="ml" for="hookStyle">Hook animasyonu</label>
 <select id="hookStyle">
 <option value="auto">Otomatik</option>
@@ -376,7 +390,7 @@ function trans(sc,local){
 }
 function bokeh(sc,t){
   g.save();g.globalCompositeOperation='lighter';
-  for(let i=0;i<10;i++){
+  for(let i=0;i<(cv.width<1000?5:10);i++){
     const x=W*((i*.173+.05+Math.sin(t*.2+i)*.04)%1),y=H*((i*.311+t*.015)%1),r=40+((i*37)%70);
     const gr=g.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,sc.pal[2]+'22');gr.addColorStop(1,sc.pal[2]+'00');
     g.fillStyle=gr;g.fillRect(x-r,y-r,2*r,2*r);
@@ -478,7 +492,7 @@ let activeV=null;
 const KTERM={card:['credit card payment','paying with card','contactless payment','shopping checkout','swiping credit card','online shopping laptop'],coins:['cash money savings','counting money','piggy bank coins','dollar bills falling','wallet cash','golden coins'],down:['stressed person bills','worried man laptop','empty wallet','rain window sad','arguing couple bills','stock market crash red'],up:['stock market growth','business growth chart','city skyline sunrise','plant growing time lapse','rocket launch','success celebration'],shield:['family home security','happy family home','safe lock vault','umbrella rain protection','shield protection','smiling family kitchen'],stat:['calculator finance numbers','business charts desk','data analytics screen','typing laptop numbers','spreadsheet monitor','accountant desk'],pie:['budget planning notebook','calculator budget','planning finances table','writing notes desk','piggy bank','home budget'],home:['house keys apartment','neighborhood houses','moving boxes apartment','modern house exterior','real estate sign','kitchen home interior'],clock:['clock time passing','calendar planning','hourglass sand','time lapse city','calendar pages flipping','alarm clock morning'],target:['dartboard target','planning goals desk','climbing mountain','chess strategy','checklist writing','running track'],bulb:['idea light bulb','thinking person notebook','lightbulb moment','brainstorm sticky notes','person thinking window','reading book coffee'],badge:['city business people walking','modern office work','busy city street','people phone walking','coffee shop laptop','night city traffic']};
 function vbg(sc,t,local){
   const v=sc.vid;
-  if(mode&&activeV!==v){if(activeV)activeV.pause();activeV=v;v.currentTime=0;v.play().catch(()=>{})}
+  if(mode&&activeV!==v){if(activeV)activeV.pause();activeV=v;if(v.currentTime>.2)v.currentTime=0;v.play().catch(()=>{})}
   const vw=v.videoWidth||1080,vh=v.videoHeight||1920,z=Math.max(W/vw,H/vh)*(1.04+Math.min(local,2.5)*.012);
   g.save();g.translate(W/2,H/2);g.scale(z,z);g.drawImage(v,-vw/2,-vh/2);g.restore();
   const sh=g.createLinearGradient(0,0,0,H);sh.addColorStop(0,'rgba(0,0,0,.45)');sh.addColorStop(.5,'rgba(0,0,0,.28)');sh.addColorStop(1,'rgba(0,0,0,.6)');
@@ -580,6 +594,11 @@ async function makeThumb(blob){
   URL.revokeObjectURL(url);
   return out;
 }
+function updUse(){
+  const el=$('useInfo');if(!el)return;
+  const n=scenes.filter(x=>x.blob&&x.use!==false).length;
+  el.textContent=scenes.some(x=>x.blob)?'Videoda '+n+'/'+scenes.length+' sahnede seçtiğin klipler kullanılacak. Diğer sahnelerde animasyon çalışır.':'';
+}
 let curPrev=null;
 function stopPrev(){
   if(!curPrev)return;
@@ -621,7 +640,7 @@ function renderScenes(){
       try{
         const r=await findClip(i,inp.value.trim(),MODS[$('clipStyle').value]||MODS.auto,Math.floor(Math.random()*7),new Set(getRecent()));
         sc.q=r.q||inp.value;
-        if(r.blob){if(sc.blob)dropVid(sc);sc.blob=r.blob;sc.vid=null;rememberUsed(r.id);sc.thumb=await makeThumb(r.blob);pst((i+1)+'. sahne için yeni klip bulundu.')}
+        if(r.blob){if(sc.blob)dropVid(sc);sc.blob=r.blob;sc.use=true;sc.own=false;sc.vid=null;rememberUsed(r.id);sc.thumb=await makeThumb(r.blob);pst((i+1)+'. sahne için yeni klip bulundu.')}
         else pst((i+1)+'. sahne: '+r.fail+'. Başka bir kelime dene.',true);
       }catch(e){
         const m=e&&e.message;
@@ -632,10 +651,16 @@ function renderScenes(){
     let media;
     if(sc.thumb){media=document.createElement('img');media.className='th';media.src=sc.thumb;media.alt='Klip önizlemesi';media.onclick=()=>togglePrev(sc,media)}
     else{media=document.createElement('div');media.className='thb';media.textContent=sc.blob?'Önizleme yok':'Klip yok'}
-    const col=document.createElement('div');col.className='scr';col.append(inp,b);
+    if(sc.blob&&sc.use!==false)media.classList.add('sel');
+    const lab=document.createElement('label');lab.className='use';
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!sc.blob&&sc.use!==false;cb.disabled=!sc.blob;
+    cb.onchange=()=>{sc.use=cb.checked;if(!cb.checked)dropVid(sc);renderScenes();draw(0)};
+    lab.append(cb,document.createTextNode('Videoda bu klibi kullan'));
+    const col=document.createElement('div');col.className='scr';col.append(lab,inp,b);
     const body=document.createElement('div');body.className='scbody';body.append(media,col);
     row.append(h,body);box.appendChild(row);
   });
+  updUse();
 }
 $('pxFind').addEventListener('click',async()=>{
   const cfg=pxCfg();
@@ -646,14 +671,15 @@ $('pxFind').addEventListener('click',async()=>{
   const mods=MODS[$('clipStyle').value]||MODS.auto,seed=Math.floor(Math.random()*7),recentSet=new Set(getRecent());
   pxState.usedNow=new Set();
   const fails=[];let ok=0;
-  scenes.forEach(sc=>{if(sc.blob)dropVid(sc);sc.blob=null;sc.thumb='';if(!ownClips.includes(sc.vid))sc.vid=null});
+  scenes.forEach(sc=>{if(sc.own)return;if(sc.blob)dropVid(sc);sc.blob=null;sc.thumb='';sc.vid=null});
   for(let i=0;i<scenes.length;i++){
     const sc=scenes[i];
+    if(sc.own)continue;
     pst('Klip aranıyor '+(i+1)+'/'+scenes.length+'…');
     try{
       const r=await findClip(i,'',mods,seed,recentSet);
       sc.q=r.q||sc.q||'';
-      if(r.blob){sc.blob=r.blob;sc.thumb='';ok++;rememberUsed(r.id);pst('Önizleme hazırlanıyor '+(i+1)+'/'+scenes.length+'…');sc.thumb=await makeThumb(r.blob)}else fails.push(r.fail);
+      if(r.blob){sc.blob=r.blob;sc.use=true;sc.thumb='';ok++;rememberUsed(r.id);pst('Önizleme hazırlanıyor '+(i+1)+'/'+scenes.length+'…');sc.thumb=await makeThumb(r.blob)}else fails.push(r.fail);
       await sleepMs(150);
     }catch(e){
       const m=e&&e.message;
@@ -843,20 +869,33 @@ function drawBulb(sc,t){
   g.fillStyle=gr;g.beginPath();g.arc(0,-60,190,0,7);g.fill();
   g.fillStyle='#C9CED8';rr(-85,110,170,40,12);g.fill();rr(-70,155,140,40,12);g.fill();
 }
-const ownClips=[];
+const ownClips=[],ownThumbs=[];
+function assignOwn(){
+  if(!ownClips.length)return;
+  scenes.forEach(sc=>{
+    if(sc.blob)return;
+    const k=sc.idx%ownClips.length;
+    sc.blob=ownClips[k];sc.thumb=ownThumbs[k]||'';sc.own=true;if(sc.use===undefined)sc.use=true;
+  });
+}
 $('ownClips').addEventListener('change',async e=>{
   const fs=[...e.target.files];if(!fs.length)return;
-  $('ownName').textContent='Videolar hazırlanıyor…';
-  ownClips.length=0;
-  for(const f of fs){
-    const v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.preload='auto';
-    v.src=URL.createObjectURL(f);
-    await new Promise(res=>{v.onloadeddata=res;v.onerror=res;setTimeout(res,10000)});
-    ownClips.push(v);
+  ownClips.length=0;ownThumbs.length=0;
+  for(let k=0;k<fs.length;k++){
+    ownClips.push(fs[k]);
+    $('ownName').textContent='Önizleme hazırlanıyor '+(k+1)+'/'+fs.length+'…';
+    ownThumbs.push(await makeThumb(fs[k]));
   }
-  scenes.forEach(sc=>{sc.vid=null});
+  scenes.forEach(sc=>{if(sc.blob)dropVid(sc);sc.blob=null;sc.vid=null;sc.own=false;sc.thumb=''});
+  assignOwn();
   $('ownName').textContent=ownClips.length+' video eklendi';
-  draw(0);
+  renderScenes();draw(0);
+});
+$('ownClear').addEventListener('click',()=>{
+  ownClips.length=0;ownThumbs.length=0;
+  scenes.forEach(sc=>{if(sc.own){dropVid(sc);sc.blob=null;sc.thumb='';sc.own=false;sc.vid=null}});
+  $('ownName').textContent='Kendi videolarını ekle (ekran kaydı gibi)';$('ownClips').value='';
+  renderScenes();draw(0);
 });
 let hookEndT=0;
 function pillDraw(cx,cy,text,col,s,glow){
@@ -894,7 +933,7 @@ function makeVid(sc){
     sc.blob=null;if(sc.vid===v)sc.vid=null;if(v.parentNode)v.parentNode.removeChild(v);
     pst('Bir klip oynatılamadı (hata '+c+'). Animasyon kullanılacak.',true);
   };
-  v.onloadeddata=()=>{if(v!==activeV){try{v.pause()}catch(e){}}if(!mode)draw(0)};
+  v.onloadeddata=()=>{if(v!==activeV){try{v.pause();v.currentTime=0}catch(e){}}if(!mode)draw(0)};
   sc.blobUrl=URL.createObjectURL(sc.blob);
   v.src=sc.blobUrl;
   $('vbox').appendChild(v);sc.vid=v;
@@ -902,6 +941,7 @@ function makeVid(sc){
 }
 function dropVid(sc){
   if(!sc.blob||!sc.vid)return;
+  if(ownClips.includes(sc.vid)){sc.vid=null;return}
   const v=sc.vid;
   v.onerror=null;v.onloadeddata=null;
   try{v.pause();v.removeAttribute('src');v.load()}catch(e){}
@@ -909,6 +949,9 @@ function dropVid(sc){
   if(sc.blobUrl){URL.revokeObjectURL(sc.blobUrl);sc.blobUrl=null}
   sc.vid=null;
 }
+function applyQ(){const w=$('quality').value==='1080'?1080:720;cv.width=w;cv.height=Math.round(w*16/9);if(!mode)draw(0)}
+$('quality').addEventListener('change',applyQ);
+applyQ();
 function caps(i,wp){
   const ch=chunks.find(c=>i>=c.a&&i<c.b)||chunks[chunks.length-1];
   g.font='118px Anton, Impact, sans-serif';g.textBaseline='middle';g.lineJoin='round';
@@ -935,6 +978,7 @@ function caps(i,wp){
 }
 
 function idle(){
+  g.setTransform(cv.width/W,0,0,cv.width/W,0,0);
   const c=PALS[0],gr=g.createLinearGradient(0,0,W,H);gr.addColorStop(0,c[0]);gr.addColorStop(1,'#050913');
   g.fillStyle=gr;g.fillRect(0,0,W,H);
   g.fillStyle='#fff';g.globalAlpha=.85;g.font='96px Anton, Impact, sans-serif';g.textAlign='center';g.textBaseline='middle';
@@ -942,6 +986,7 @@ function idle(){
 }
 
 function draw(t){
+  g.setTransform(cv.width/W,0,0,cv.width/W,0,0);
   if(!words.length){idle();return}
   const d=dur(),f=Math.min(Math.max((t-off)/d,0),.9999);
   if(OUT()&&t>=d+.3){drawOutro(t-d-.3,t);watermark();return}
@@ -949,10 +994,12 @@ function draw(t){
   const sc=scenes.find(s=>i>=s.s&&i<s.e)||scenes[0];
   const local=Math.max(0,t-(words[sc.s].t0*d+off));
   if(sc.blob){
-    makeVid(sc);const nx=scenes[sc.idx+1];if(nx&&nx.blob)makeVid(nx);
+    const nx=scenes[sc.idx+1];
+    if(sc.use!==false)makeVid(sc);
+    if(nx&&nx.blob&&nx.use!==false)makeVid(nx);
     scenes.forEach(o=>{if(o!==sc&&o!==nx&&o.blob)dropVid(o)});
   }
-  if(!sc.vid&&ownClips.length)sc.vid=ownClips[sc.idx%ownClips.length];
+  
   if(sc.vid&&sc.vid.readyState>=2){vbg(sc,t,local);if(sc.kind==='stat'||sc.hook)illus(sc,t,local)}else{bg(sc,t,local);illus(sc,t,local)}
   const w=words[i];if(sc.hook)drawHook(sc,i,t,d);else caps(i,((f-w.t0)*d)/.18);
   g.fillStyle='rgba(255,255,255,.28)';g.fillRect(90,70,W-180,10);
@@ -961,7 +1008,7 @@ function draw(t){
 
 function refresh(){
   const ok=words.length>0&&!!buf;$('kgen').disabled=!words.length||kBusy;$('metaBtn').disabled=!words.length;
-  $('prev').disabled=!ok||!!mode;$('rec').disabled=!ok||!!mode||!window.MediaRecorder;$('recHook').disabled=$('rec').disabled;if(typeof renderScenes==='function')renderScenes();
+  $('prev').disabled=!ok||!!mode;$('rec').disabled=!ok||!!mode||!window.MediaRecorder;$('recHook').disabled=$('rec').disabled;if(typeof assignOwn==='function')assignOwn();if(typeof renderScenes==='function')renderScenes();
   draw(0);
 }
 
@@ -982,7 +1029,7 @@ async function start(record,onlyHook){
       const stream=cv.captureStream(30);
       dest.stream.getAudioTracks().forEach(tr=>stream.addTrack(tr));
       const mt=pickMime();
-      rec=new MediaRecorder(stream,mt?{mimeType:mt,videoBitsPerSecond:8000000}:undefined);
+      rec=new MediaRecorder(stream,mt?{mimeType:mt,videoBitsPerSecond:($('quality').value==='1080'?8000000:5000000)}:undefined);
       parts=[];
       rec.ondataavailable=e=>{if(e.data&&e.data.size)parts.push(e.data)};
       rec.onstop=()=>{
@@ -1001,7 +1048,11 @@ async function start(record,onlyHook){
   }catch(e){mode=null;refresh();say('Başlatılamadı: '+(e&&e.message||'bilinmeyen hata'),true)}
 }
 
+let lastDraw=0;
 function loop(){
+  const np=performance.now();
+  if(np-lastDraw<30){raf=requestAnimationFrame(loop);return}
+  lastDraw=np;
   const t=ctx.currentTime-t0,d=dur();
   draw(Math.max(0,t));
   if(t>=(hookEndT?hookEndT+.2:d+OUT()+.5)){finish();return}
