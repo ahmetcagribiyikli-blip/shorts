@@ -1023,11 +1023,14 @@ function draw(t){
   let i=words.findIndex(w=>f>=w.t0&&f<w.t1);if(i<0)i=0;
   const sc=scenes.find(s=>i>=s.s&&i<s.e)||scenes[0];
   const local=Math.max(0,t-(words[sc.s].t0*d+off));
-  if(sc.blob){
+  {
     const nx=scenes[sc.idx+1];
-    if(sc.use!==false)makeVid(sc);
-    if(nx&&nx.blob&&nx.use!==false)makeVid(nx);
-    scenes.forEach(o=>{if(o!==sc&&o!==nx&&o.blob)dropVid(o)});
+    if(sc.blob&&sc.use!==false)makeVid(sc);
+    if(sc.blob&&sc.use===false)dropVid(sc);
+    const lead=!!(nx&&nx.blob&&nx.use!==false);
+    const soon=lead&&(!mode||(words[nx.s].t0*dur()+off-t)<1.0);
+    if(soon)makeVid(nx);
+    scenes.forEach(o=>{if(o!==sc&&!(o===nx&&soon)&&o.blob)dropVid(o)});
   }
   
   if(sc.vid&&sc.vid.readyState>=2){vbg(sc,t,local);if(sc.kind==='stat'||sc.hook)illus(sc,t,local)}else{bg(sc,t,local);illus(sc,t,local)}
