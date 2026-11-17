@@ -549,6 +549,7 @@ async function findClip(i,custom,mods,seed,recentSet){
   let pool=list.filter(v=>!pxState.usedNow.has(v.id));
   const fresh=pool.filter(v=>!recentSet.has(v.id));if(fresh.length>=3)pool=fresh;
   if(cfg.pix){const por=pool.filter(v=>{const c=v.videos&&(v.videos.medium||v.videos.large);return c&&c.height>c.width});if(por.length>=3)pool=por}
+  pool=pool.filter(v=>!/green\s*-?screen|greenscreen|chroma|alpha channel|transparent/i.test((v.tags||'')+' '+(v.url||'')));
   if(!pool.length)return{fail:'uygun klip kalmadı',q:used};
   const vd=pool[Math.floor(Math.random()*pool.length)];
   let link='';
@@ -569,13 +570,14 @@ async function findClip(i,custom,mods,seed,recentSet){
   pxState.usedNow.add(vd.id);
   return{blob:new Blob([blob],{type:'video/mp4'}),id:vd.id,q:used};
 }
+let lastGreen=false;
 async function makeThumb(blob){
   const url=URL.createObjectURL(blob);
   const v=document.createElement('video');
   v.muted=true;v.defaultMuted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.setAttribute('muted','');v.preload='auto';
   v.src=url;$('vbox').appendChild(v);
   const nap=ms=>new Promise(z=>setTimeout(z,ms));
-  let out='';
+  let out='';lastGreen=false;
   try{
     const pr=v.play();if(pr&&pr.catch)pr.catch(()=>{});
     const t0=Date.now();
@@ -591,8 +593,9 @@ async function makeThumb(blob){
         const x=c.getContext('2d'),vw=v.videoWidth||180,vh=v.videoHeight||320,z=Math.max(180/vw,320/vh);
         x.fillStyle='#000';x.fillRect(0,0,180,320);
         x.drawImage(v,(180-vw*z)/2,(320-vh*z)/2,vw*z,vh*z);
-        const px=x.getImageData(0,0,180,320).data;let sum=0,n=0;
-        for(let k=0;k<px.length;k+=1600){sum+=px[k]+px[k+1]+px[k+2];n+=3}
+        const px=x.getImageData(0,0,180,320).data;let sum=0,n=0,gc=0;
+        for(let k=0;k<px.length;k+=1600){const R=px[k],G=px[k+1],B=px[k+2];sum+=R+G+B;n+=3;if(G>150&&R<110&&B<110&&G-R>70)gc++}
+        if(gc/(n/3)>.5){lastGreen=true;break}
         if(sum/n>14)out=c.toDataURL('image/jpeg',.72);else await nap(500);
       }
     }
@@ -628,6 +631,18 @@ function togglePrev(sc,img){
   curPrev={v,img,url};
   const pr=v.play();if(pr&&pr.catch)pr.catch(()=>{});
 }
+async function goodClip(i,custom,mods,seed,recentSet){
+  let r;
+  for(let a=0;a<3;a++){
+    r=await findClip(i,custom,mods,seed,recentSet);
+    if(!r.blob)return r;
+    pst('Önizleme hazırlanıyor '+(i+1)+'/'+scenes.length+'…');
+    const th=await makeThumb(r.blob);
+    if(lastGreen){r={fail:'yeşil ekran klibi atlandı',q:r.q};continue}
+    r.thumb=th;return r;
+  }
+  return r;
+}
 function renderScenes(){
   const box=$('sceneList');if(!box)return;
   stopPrev();
@@ -646,9 +661,9 @@ function renderScenes(){
       if(!cfg.key){pst('Önce API anahtarını yapıştır.',true);return}
       b.disabled=true;pst((i+1)+'. sahne için aranıyor…');
       try{
-        const r=await findClip(i,inp.value.trim(),MODS[$('clipStyle').value]||MODS.auto,Math.floor(Math.random()*7),new Set(getRecent()));
+        const r=await goodClip(i,inp.value.trim(),MODS[$('clipStyle').value]||MODS.auto,Math.floor(Math.random()*7),new Set(getRecent()));
         sc.q=r.q||inp.value;
-        if(r.blob){if(sc.blob)dropVid(sc);sc.blob=r.blob;sc.use=true;sc.own=false;sc.vid=null;rememberUsed(r.id);sc.thumb=await makeThumb(r.blob);pst((i+1)+'. sahne için yeni klip bulundu.')}
+        if(r.blob){if(sc.blob)dropVid(sc);sc.blob=r.blob;sc.use=true;sc.own=false;sc.vid=null;rememberUsed(r.id);sc.thumb=r.thumb||'';pst((i+1)+'. sahne için yeni klip bulundu.')}
         else pst((i+1)+'. sahne: '+r.fail+'. Başka bir kelime dene.',true);
       }catch(e){
         const m=e&&e.message;
@@ -685,9 +700,9 @@ $('pxFind').addEventListener('click',async()=>{
     if(sc.own)continue;
     pst('Klip aranıyor '+(i+1)+'/'+scenes.length+'…');
     try{
-      const r=await findClip(i,'',mods,seed,recentSet);
+      const r=await goodClip(i,'',mods,seed,recentSet);
       sc.q=r.q||sc.q||'';
-      if(r.blob){sc.blob=r.blob;sc.use=true;sc.thumb='';ok++;rememberUsed(r.id);pst('Önizleme hazırlanıyor '+(i+1)+'/'+scenes.length+'…');sc.thumb=await makeThumb(r.blob)}else fails.push(r.fail);
+      if(r.blob){sc.blob=r.blob;sc.use=true;sc.thumb=r.thumb||'';ok++;rememberUsed(r.id)}else fails.push(r.fail);
       await sleepMs(150);
     }catch(e){
       const m=e&&e.message;
@@ -1064,14 +1079,14 @@ async function start(record,onlyHook){
       rec.start(500);
       $('result').hidden=true;
     }else src.connect(ctx.destination);
-    mode=record?'rec':'prev';t0=ctx.currentTime+.15;wallStart=performance.now();if(hookEndT)src.start(t0,0,hookEndT);else src.start(t0);sfx(record?sinkDest:ctx.destination,t0);
+    mode=record?'rec':'prev';t0=ctx.currentTime+.15;wallStart=performance.now();lastT=-9;lastTchange=wallStart;if(hookEndT)src.start(t0,0,hookEndT);else src.start(t0);sfx(record?sinkDest:ctx.destination,t0);
     $('prev').disabled=true;$('rec').disabled=true;$('recHook').disabled=true;
     say(record?'Video oluşturuluyor. Ekranı açık tut ve bu sayfadan çıkma.':'Önizleme oynuyor.');
     loop();
   }catch(e){mode=null;refresh();say('Başlatılamadı: '+(e&&e.message||'bilinmeyen hata'),true)}
 }
 
-let lastDraw=0,wallStart=0;
+let lastDraw=0,wallStart=0,lastT=-9,lastTchange=0;
 function abortRun(){
   cancelAnimationFrame(raf);
   const was=mode;mode=null;
@@ -1086,6 +1101,7 @@ function loop(){
   lastDraw=np;
   const t=ctx.currentTime-t0,d=dur();
   if(t<=0.02&&np-wallStart>2500){say('Ses saati ilerlemiyor (durum: '+ctx.state+'). Sayfayı yenileyip tekrar dene, sorun sürerse başka uygulamaları kapat.',true);abortRun();return}
+  if(t!==lastT){lastT=t;lastTchange=np}else if(np-lastTchange>2500){say('Ses saati durdu (durum: '+ctx.state+'). Sayfayı yenileyip tekrar dene.',true);abortRun();return}
   try{draw(Math.max(0,t))}catch(e){say('Çizim hatası: '+((e&&e.message)||e),true);abortRun();return}
   if(t>=(hookEndT?hookEndT+.2:d+OUT()+.5)){finish();return}
   if(mode==='rec')say('Video oluşturuluyor: %'+Math.min(99,Math.round(Math.max(0,t)/d*100))+'. Ekranı açık tut.');
