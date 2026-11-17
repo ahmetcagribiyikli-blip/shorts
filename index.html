@@ -54,6 +54,10 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .sct{font-size:14px;color:var(--muted);margin-bottom:6px;line-height:1.4}
 .sc input{width:100%;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:8px}
 .sc button{width:100%}
+.scbody{display:flex;gap:12px;align-items:flex-start}
+.scr{flex:1;min-width:0}
+.th{width:100px;aspect-ratio:9/16;object-fit:cover;border-radius:12px;background:#000;flex:none;cursor:pointer;display:block}
+.thb{width:100px;aspect-ratio:9/16;border-radius:12px;border:1px dashed var(--line);display:grid;place-items:center;font-size:12px;color:var(--muted);flex:none;text-align:center;padding:4px}
 #pxStatus{min-height:24px;font-size:15px}
 #pxStatus.err{color:var(--err)}
 a{color:inherit}
@@ -102,7 +106,7 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 </select>
 <div class="row"><button id="pxFind">Klipleri bul (her basışta yeni)</button></div>
 <div id="pxStatus" role="status"></div>
-<div class="hint">Klipler bulununca her sahne için kullanılan arama kelimesi burada görünür. Kelimeyi değiştirip tek sahne için tekrar arayabilirsin.</div>
+<div class="hint">Klipler bulununca her sahnenin küçük önizlemesi ve arama kelimesi burada görünür. Küçük resme dokunursan klip oynar. Kelimeyi değiştirip tek sahne için tekrar arayabilirsin.</div>
 <div id="sceneList"></div>
 </section>
 
@@ -550,14 +554,62 @@ async function findClip(i,custom,mods,seed,recentSet){
   pxState.usedNow.add(vd.id);
   return{blob:new Blob([blob],{type:'video/mp4'}),id:vd.id,q:used};
 }
+async function makeThumb(blob){
+  const url=URL.createObjectURL(blob);
+  const v=document.createElement('video');
+  v.muted=true;v.defaultMuted=true;v.playsInline=true;v.setAttribute('playsinline','');v.setAttribute('muted','');v.preload='auto';
+  v.src=url;$('vbox').appendChild(v);
+  const wait=(ev,ms)=>new Promise(res=>{let done=false;const f=()=>{if(!done){done=true;res(true)}};v.addEventListener(ev,f,{once:true});setTimeout(()=>{if(!done){done=true;res(false)}},ms)});
+  let out='';
+  try{
+    const pr=v.play();if(pr&&pr.catch)pr.catch(()=>{});
+    if(v.readyState<2)await wait('loadeddata',6000);
+    if(v.readyState>=2){
+      v.pause();
+      const t=Math.min(1,(v.duration||2)/3);
+      if(t>0){const sk=wait('seeked',3000);v.currentTime=t;await sk}
+      const c=document.createElement('canvas');c.width=180;c.height=320;
+      const x=c.getContext('2d'),vw=v.videoWidth||180,vh=v.videoHeight||320,z=Math.max(180/vw,320/vh);
+      x.fillStyle='#000';x.fillRect(0,0,180,320);
+      x.drawImage(v,(180-vw*z)/2,(320-vh*z)/2,vw*z,vh*z);
+      out=c.toDataURL('image/jpeg',.72);
+    }
+  }catch(e){out=''}
+  try{v.pause();v.removeAttribute('src');v.load()}catch(e){}
+  if(v.parentNode)v.parentNode.removeChild(v);
+  URL.revokeObjectURL(url);
+  return out;
+}
+let curPrev=null;
+function stopPrev(){
+  if(!curPrev)return;
+  const {v,img,url}=curPrev;
+  try{v.pause();v.removeAttribute('src');v.load()}catch(e){}
+  URL.revokeObjectURL(url);
+  if(v.parentNode)v.parentNode.replaceChild(img,v);
+  curPrev=null;
+}
+function togglePrev(sc,img){
+  const same=curPrev&&curPrev.img===img;
+  stopPrev();
+  if(same||!sc.blob)return;
+  const v=document.createElement('video');
+  v.className='th';v.muted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.autoplay=true;
+  const url=URL.createObjectURL(sc.blob);v.src=url;
+  v.onclick=()=>togglePrev(sc,img);
+  img.parentNode.replaceChild(v,img);
+  curPrev={v,img,url};
+  const pr=v.play();if(pr&&pr.catch)pr.catch(()=>{});
+}
 function renderScenes(){
   const box=$('sceneList');if(!box)return;
+  stopPrev();
   box.innerHTML='';
   scenes.forEach((sc,i)=>{
     const txt=words.slice(sc.s,sc.e).map(w=>w.x).join(' ');
     const row=document.createElement('div');row.className='sc';
     const h=document.createElement('div');h.className='sct';
-    h.textContent=(i+1)+'. '+(txt.length>70?txt.slice(0,70)+'…':txt)+(sc.blob?'  ✓ klip var':'');
+    h.textContent=(i+1)+'. '+(txt.length>70?txt.slice(0,70)+'…':txt);
     const inp=document.createElement('input');inp.type='text';inp.value=sc.q||keyWords(txt)[0]||'';
     inp.placeholder='Arama kelimesi (İngilizce)';inp.autocapitalize='off';inp.spellcheck=false;
     inp.oninput=()=>{sc.q=inp.value};
@@ -569,7 +621,7 @@ function renderScenes(){
       try{
         const r=await findClip(i,inp.value.trim(),MODS[$('clipStyle').value]||MODS.auto,Math.floor(Math.random()*7),new Set(getRecent()));
         sc.q=r.q||inp.value;
-        if(r.blob){if(sc.blob)dropVid(sc);sc.blob=r.blob;sc.vid=null;rememberUsed(r.id);pst((i+1)+'. sahne için yeni klip bulundu. Önizle ile bak.')}
+        if(r.blob){if(sc.blob)dropVid(sc);sc.blob=r.blob;sc.vid=null;rememberUsed(r.id);sc.thumb=await makeThumb(r.blob);pst((i+1)+'. sahne için yeni klip bulundu.')}
         else pst((i+1)+'. sahne: '+r.fail+'. Başka bir kelime dene.',true);
       }catch(e){
         const m=e&&e.message;
@@ -577,7 +629,12 @@ function renderScenes(){
       }
       renderScenes();draw(0);
     };
-    row.append(h,inp,b);box.appendChild(row);
+    let media;
+    if(sc.thumb){media=document.createElement('img');media.className='th';media.src=sc.thumb;media.alt='Klip önizlemesi';media.onclick=()=>togglePrev(sc,media)}
+    else{media=document.createElement('div');media.className='thb';media.textContent=sc.blob?'Önizleme yok':'Klip yok'}
+    const col=document.createElement('div');col.className='scr';col.append(inp,b);
+    const body=document.createElement('div');body.className='scbody';body.append(media,col);
+    row.append(h,body);box.appendChild(row);
   });
 }
 $('pxFind').addEventListener('click',async()=>{
@@ -589,14 +646,14 @@ $('pxFind').addEventListener('click',async()=>{
   const mods=MODS[$('clipStyle').value]||MODS.auto,seed=Math.floor(Math.random()*7),recentSet=new Set(getRecent());
   pxState.usedNow=new Set();
   const fails=[];let ok=0;
-  scenes.forEach(sc=>{if(sc.blob)dropVid(sc);sc.blob=null;if(!ownClips.includes(sc.vid))sc.vid=null});
+  scenes.forEach(sc=>{if(sc.blob)dropVid(sc);sc.blob=null;sc.thumb='';if(!ownClips.includes(sc.vid))sc.vid=null});
   for(let i=0;i<scenes.length;i++){
     const sc=scenes[i];
     pst('Klip aranıyor '+(i+1)+'/'+scenes.length+'…');
     try{
       const r=await findClip(i,'',mods,seed,recentSet);
       sc.q=r.q||sc.q||'';
-      if(r.blob){sc.blob=r.blob;ok++;rememberUsed(r.id)}else fails.push(r.fail);
+      if(r.blob){sc.blob=r.blob;sc.thumb='';ok++;rememberUsed(r.id);pst('Önizleme hazırlanıyor '+(i+1)+'/'+scenes.length+'…');sc.thumb=await makeThumb(r.blob)}else fails.push(r.fail);
       await sleepMs(150);
     }catch(e){
       const m=e&&e.message;
