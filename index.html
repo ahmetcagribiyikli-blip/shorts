@@ -57,6 +57,7 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 </style>
 </head>
 <body>
+<div id="vbox" aria-hidden="true" style="position:fixed;left:0;top:0;width:2px;height:2px;overflow:hidden;opacity:.01;pointer-events:none"></div>
 <main>
 <h1>Shorts Stüdyo</h1>
 <p class="lead">Senaryoyu ve sesi yükle. Altyazılı, animasyonlu 9:16 videoyu telefonunda üret.</p>
@@ -549,7 +550,7 @@ $('pxFind').addEventListener('click',async()=>{
       if(!fr.ok)throw new Error('Klip indirilemedi ('+fr.status+')');
       const blob=await fr.blob();
       if(blob.size<20000)throw new Error('Klip boş geldi');
-      sc.blob=blob;ok++;recent.push(vd.id);
+      sc.blob=new Blob([blob],{type:'video/mp4'});ok++;recent.push(vd.id);
       await sleep(150);
     }catch(e){
       if(e&&e.message==='KEY'){pst('Anahtar geçersiz. Anahtarı kontrol et.',true);$('pxFind').disabled=false;return}
@@ -558,8 +559,16 @@ $('pxFind').addEventListener('click',async()=>{
     }
   }
   try{localStorage.setItem('pxUsed',JSON.stringify(recent.slice(-80)))}catch(e){}
+  let note='';
+  const f0=scenes.find(x=>x.blob);
+  if(f0){
+    pst('İlk klip kontrol ediliyor…');
+    makeVid(f0);await sleep(3000);
+    const v0=f0.vid;
+    note=v0&&v0.readyState>=2?' İlk klip oynatılabilir.':' Uyarı: ilk klip yüklenmedi (durum '+(v0?v0.readyState:'-')+(v0&&v0.error?', hata '+v0.error.code:'')+').';
+  }
   $('pxFind').disabled=false;
-  pst(ok+'/'+scenes.length+' sahneye klip bulundu.'+(fails.length?' Sorun: '+[...new Set(fails)].slice(0,3).join('; ')+'.':' Beğenmediysen tekrar bas, yeni klipler gelir.'),fails.length>0&&ok<scenes.length);
+  pst(ok+'/'+scenes.length+' sahneye klip bulundu.'+(fails.length?' Sorun: '+[...new Set(fails)].slice(0,3).join('; ')+'.':' Beğenmediysen tekrar bas, yeni klipler gelir.')+note,(fails.length>0&&ok<scenes.length)||/Uyarı/.test(note));
   draw(0);
 });
 const STOP=new Set('about after again also because been before being between both could does doing down during each even from have having here into just like made make many more most much must only other over same should some such than that their them then there these they this those through very want were what when where which while with would your yours will been get got how why who our out its not and the for are but you was can has had one two any all new'.split(' '));
@@ -772,15 +781,25 @@ $('musVol').addEventListener('input',e=>{$('musv').textContent=Math.round(e.targ
 function makeVid(sc){
   if(sc.vid||!sc.blob)return;
   const v=document.createElement('video');
-  v.muted=true;v.loop=true;v.playsInline=true;v.setAttribute('playsinline','');v.preload='auto';
-  v.onerror=()=>{sc.blob=null;if(sc.vid===v)sc.vid=null};
-  v.onloadeddata=()=>{if(!mode)draw(0)};
+  v.muted=true;v.defaultMuted=true;v.loop=true;v.playsInline=true;
+  v.setAttribute('playsinline','');v.setAttribute('muted','');v.preload='auto';
+  v.onerror=()=>{
+    const c=v.error?v.error.code:'?';
+    sc.blob=null;if(sc.vid===v)sc.vid=null;if(v.parentNode)v.parentNode.removeChild(v);
+    pst('Bir klip oynatılamadı (hata '+c+'). Animasyon kullanılacak.',true);
+  };
+  v.onloadeddata=()=>{if(v!==activeV){try{v.pause()}catch(e){}}if(!mode)draw(0)};
   sc.blobUrl=URL.createObjectURL(sc.blob);
-  v.src=sc.blobUrl;sc.vid=v;
+  v.src=sc.blobUrl;
+  $('vbox').appendChild(v);sc.vid=v;
+  const pr=v.play();if(pr&&pr.catch)pr.catch(()=>{});
 }
 function dropVid(sc){
   if(!sc.blob||!sc.vid)return;
-  try{sc.vid.pause();sc.vid.removeAttribute('src');sc.vid.load()}catch(e){}
+  const v=sc.vid;
+  v.onerror=null;v.onloadeddata=null;
+  try{v.pause();v.removeAttribute('src');v.load()}catch(e){}
+  if(v.parentNode)v.parentNode.removeChild(v);
   if(sc.blobUrl){URL.revokeObjectURL(sc.blobUrl);sc.blobUrl=null}
   sc.vid=null;
 }
