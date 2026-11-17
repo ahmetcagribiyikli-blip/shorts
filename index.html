@@ -50,6 +50,10 @@ button:disabled{opacity:.4;cursor:not-allowed}
 #kStatus.err{color:var(--err)}
 #chName{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
 .row input{flex:1;min-width:0;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif}
+.sc{border-top:1px solid var(--line);padding:12px 0 4px}
+.sct{font-size:14px;color:var(--muted);margin-bottom:6px;line-height:1.4}
+.sc input{width:100%;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:8px}
+.sc button{width:100%}
 #pxStatus{min-height:24px;font-size:15px}
 #pxStatus.err{color:var(--err)}
 a{color:inherit}
@@ -98,6 +102,8 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 </select>
 <div class="row"><button id="pxFind">Klipleri bul (her basışta yeni)</button></div>
 <div id="pxStatus" role="status"></div>
+<div class="hint">Klipler bulununca her sahne için kullanılan arama kelimesi burada görünür. Kelimeyi değiştirip tek sahne için tekrar arayabilirsin.</div>
+<div id="sceneList"></div>
 </section>
 
 <section>
@@ -484,92 +490,135 @@ function keyWords(txt){
   return [...new Set(ws)].sort((a,b)=>sc(b)-sc(a)).slice(0,3);
 }
 const MODS={auto:['','cinematic','close up','slow motion','aerial','night'],cine:['cinematic'],close:['close up'],night:['night city']};
-$('pxFind').addEventListener('click',async()=>{
-  const key=$('pxKey').value.trim();
-  if(!key){pst('Önce API anahtarını yapıştır.',true);return}
-  if(!scenes.length){pst('Önce senaryoyu yapıştır.',true);return}
-  try{localStorage.setItem('pxkey',key);localStorage.setItem('pxproxy',$('proxyUrl').value.trim())}catch(e){}
-  $('pxFind').disabled=true;
-  const pix=/^\d+-[0-9a-f]+$/i.test(key);
-  const mods=MODS[$('clipStyle').value]||MODS.auto,seed=Math.floor(Math.random()*7);
-  let recent=[];try{recent=JSON.parse(localStorage.getItem('pxUsed')||'[]')}catch(e){}
-  const recentSet=new Set(recent),usedNow=new Set(),cache={},fails=[];let ok=0,stage='search';
-  const sleep=ms=>new Promise(z=>setTimeout(z,ms));
-  scenes.forEach(sc=>{if(sc.blob)dropVid(sc);sc.blob=null;if(!ownClips.includes(sc.vid))sc.vid=null});
-  const getJSON=async q=>{
-    let r,tries=0;
+function getRecent(){let r=[];try{r=JSON.parse(localStorage.getItem('pxUsed')||'[]')}catch(e){}return r}
+function rememberUsed(id){const r=getRecent();r.push(id);try{localStorage.setItem('pxUsed',JSON.stringify(r.slice(-80)))}catch(e){}}
+const pxState={cache:{},usedNow:new Set()};
+const sleepMs=ms=>new Promise(z=>setTimeout(z,ms));
+function pxCfg(){const key=$('pxKey').value.trim();return{key,pix:/^\d+-[0-9a-f]+$/i.test(key),proxy:$('proxyUrl').value.trim().replace(/\/+$/,'')}}
+async function pxGet(cfg,q){
+  const ck=(cfg.pix?'p:':'x:')+q;
+  if(pxState.cache[ck])return pxState.cache[ck];
+  let r,tries=0;
+  try{
     for(;;){
-      if(pix)r=await fetch('https://pixabay.com/api/videos/?key='+encodeURIComponent(key)+'&q='+encodeURIComponent(q)+'&per_page=60&safesearch=true');
-      else r=await fetch('https://api.pexels.com/videos/search?query='+encodeURIComponent(q)+'&orientation=portrait&size=medium&per_page=40',{headers:{Authorization:key}});
-      if(r.status===429&&tries<2){tries++;pst('İstek sınırına takıldı, 6 saniye bekliyorum…');await sleep(6000);continue}
+      if(cfg.pix)r=await fetch('https://pixabay.com/api/videos/?key='+encodeURIComponent(cfg.key)+'&q='+encodeURIComponent(q)+'&per_page=60&safesearch=true');
+      else r=await fetch('https://api.pexels.com/videos/search?query='+encodeURIComponent(q)+'&orientation=portrait&size=medium&per_page=40',{headers:{Authorization:cfg.key}});
+      if(r.status===429&&tries<2){tries++;pst('İstek sınırına takıldı, 6 saniye bekliyorum…');await sleepMs(6000);continue}
       break;
     }
-    if(r.status===401)throw new Error('KEY');
-    if(pix&&r.status===400){const t=await r.text();if(/key/i.test(t))throw new Error('KEY');throw new Error('Arama hatası (400)')}
-    if(!r.ok)throw new Error('Arama hatası ('+r.status+')');
-    return r.json();
-  };
-  const search=async q=>{
-    if(cache[q])return cache[q];
-    stage='search';
-    const j=await getJSON(q);
-    return cache[q]=pix?(j.hits||[]):(j.videos||[]);
-  };
+  }catch(e){throw new Error('NET_SEARCH')}
+  if(r.status===401)throw new Error('KEY');
+  if(cfg.pix&&r.status===400){const t=await r.text();if(/key/i.test(t))throw new Error('KEY');throw new Error('Arama hatası (400)')}
+  if(!r.ok)throw new Error('Arama hatası ('+r.status+')');
+  const j=await r.json();
+  return pxState.cache[ck]=cfg.pix?(j.hits||[]):(j.videos||[]);
+}
+async function findClip(i,custom,mods,seed,recentSet){
+  const cfg=pxCfg(),sc=scenes[i];
+  const kw=keyWords(words.slice(sc.s,sc.e).map(w=>w.x).join(' '));
+  const mod=sc.hook?(mods[1]||mods[0]):mods[i%mods.length];
+  const arr=KTERM[sc.kind]||KTERM.badge,kt=arr[(i+seed)%arr.length],qs=[];
+  if(custom)qs.push(custom);
+  else{
+    if(kw[0])qs.push((kw[0]+' '+mod).trim());
+    if(kw[0]&&kw[1])qs.push(kw[0]+' '+kw[1]);
+    qs.push((kt+' '+mod).trim());qs.push(kt);
+  }
+  let list=[],used=qs[0];
+  for(const q of qs){const l=await pxGet(cfg,q);if(l.length>=4||(custom&&l.length)){list=l;used=q;break}if(l.length>list.length){list=l;used=q}}
+  if(!list.length)return{fail:'sonuç bulunamadı',q:used};
+  let pool=list.filter(v=>!pxState.usedNow.has(v.id));
+  const fresh=pool.filter(v=>!recentSet.has(v.id));if(fresh.length>=3)pool=fresh;
+  if(cfg.pix){const por=pool.filter(v=>{const c=v.videos&&(v.videos.medium||v.videos.large);return c&&c.height>c.width});if(por.length>=3)pool=por}
+  if(!pool.length)return{fail:'uygun klip kalmadı',q:used};
+  const vd=pool[Math.floor(Math.random()*pool.length)];
+  let link='';
+  if(cfg.pix){
+    const V=vd.videos||{};
+    const c=(V.medium&&V.medium.url&&(!V.medium.size||V.medium.size<=20e6))?V.medium:(V.small&&V.small.url?V.small:(V.large&&V.large.url&&V.large.size<=15e6?V.large:V.tiny));
+    link=(c&&c.url)||'';
+  }else{
+    const files=(vd.video_files||[]).filter(f=>f.file_type==='video/mp4'&&f.width&&f.height>=f.width).sort((a,b)=>Math.abs(a.width-720)-Math.abs(b.width-720));
+    link=files.length?files[0].link:'';
+  }
+  if(!link)return{fail:'klip bağlantısı yok',q:used};
+  let fr;
+  try{fr=await fetch(cfg.proxy?cfg.proxy+'/?url='+encodeURIComponent(link):link)}catch(e){throw new Error('NET_DL')}
+  if(!fr.ok)throw new Error('Klip indirilemedi ('+fr.status+')');
+  const blob=await fr.blob();
+  if(blob.size<20000)throw new Error('Klip boş geldi');
+  pxState.usedNow.add(vd.id);
+  return{blob:new Blob([blob],{type:'video/mp4'}),id:vd.id,q:used};
+}
+function renderScenes(){
+  const box=$('sceneList');if(!box)return;
+  box.innerHTML='';
+  scenes.forEach((sc,i)=>{
+    const txt=words.slice(sc.s,sc.e).map(w=>w.x).join(' ');
+    const row=document.createElement('div');row.className='sc';
+    const h=document.createElement('div');h.className='sct';
+    h.textContent=(i+1)+'. '+(txt.length>70?txt.slice(0,70)+'…':txt)+(sc.blob?'  ✓ klip var':'');
+    const inp=document.createElement('input');inp.type='text';inp.value=sc.q||keyWords(txt)[0]||'';
+    inp.placeholder='Arama kelimesi (İngilizce)';inp.autocapitalize='off';inp.spellcheck=false;
+    inp.oninput=()=>{sc.q=inp.value};
+    const b=document.createElement('button');b.textContent='Bu sahne için ara';
+    b.onclick=async()=>{
+      const cfg=pxCfg();
+      if(!cfg.key){pst('Önce API anahtarını yapıştır.',true);return}
+      b.disabled=true;pst((i+1)+'. sahne için aranıyor…');
+      try{
+        const r=await findClip(i,inp.value.trim(),MODS[$('clipStyle').value]||MODS.auto,Math.floor(Math.random()*7),new Set(getRecent()));
+        sc.q=r.q||inp.value;
+        if(r.blob){if(sc.blob)dropVid(sc);sc.blob=r.blob;sc.vid=null;rememberUsed(r.id);pst((i+1)+'. sahne için yeni klip bulundu. Önizle ile bak.')}
+        else pst((i+1)+'. sahne: '+r.fail+'. Başka bir kelime dene.',true);
+      }catch(e){
+        const m=e&&e.message;
+        pst(m==='KEY'?'Anahtar geçersiz.':m==='NET_SEARCH'?'Stok sitesine bağlanılamadı.':m==='NET_DL'?'Klip indirme engellendi, proxy adresini kontrol et.':(m||'Hata'),true);
+      }
+      renderScenes();draw(0);
+    };
+    row.append(h,inp,b);box.appendChild(row);
+  });
+}
+$('pxFind').addEventListener('click',async()=>{
+  const cfg=pxCfg();
+  if(!cfg.key){pst('Önce API anahtarını yapıştır.',true);return}
+  if(!scenes.length){pst('Önce senaryoyu yapıştır.',true);return}
+  try{localStorage.setItem('pxkey',cfg.key);localStorage.setItem('pxproxy',$('proxyUrl').value.trim())}catch(e){}
+  $('pxFind').disabled=true;
+  const mods=MODS[$('clipStyle').value]||MODS.auto,seed=Math.floor(Math.random()*7),recentSet=new Set(getRecent());
+  pxState.usedNow=new Set();
+  const fails=[];let ok=0;
+  scenes.forEach(sc=>{if(sc.blob)dropVid(sc);sc.blob=null;if(!ownClips.includes(sc.vid))sc.vid=null});
   for(let i=0;i<scenes.length;i++){
     const sc=scenes[i];
     pst('Klip aranıyor '+(i+1)+'/'+scenes.length+'…');
     try{
-      const kw=keyWords(words.slice(sc.s,sc.e).map(w=>w.x).join(' '));
-      const mod=sc.hook?(mods[1]||mods[0]):mods[i%mods.length];
-      const arr=KTERM[sc.kind]||KTERM.badge,kt=arr[(i+seed)%arr.length],qs=[];
-      if(kw[0])qs.push((kw[0]+' '+mod).trim());
-      if(kw[0]&&kw[1])qs.push(kw[0]+' '+kw[1]);
-      qs.push((kt+' '+mod).trim());qs.push(kt);
-      let list=[];
-      for(const q of qs){const l=await search(q);if(l.length>=4){list=l;break}if(l.length>list.length)list=l}
-      if(!list.length){fails.push('sonuç bulunamadı');continue}
-      let pool=list.filter(v=>!usedNow.has(v.id));
-      const fresh=pool.filter(v=>!recentSet.has(v.id));if(fresh.length>=3)pool=fresh;
-      if(pix){const por=pool.filter(v=>{const c=v.videos&&(v.videos.medium||v.videos.large);return c&&c.height>c.width});if(por.length>=3)pool=por}
-      if(!pool.length){fails.push('uygun klip kalmadı');continue}
-      const vd=pool[Math.floor(Math.random()*pool.length)];
-      usedNow.add(vd.id);
-      let link='';
-      if(pix){
-        const V=vd.videos||{};
-        const c=(V.medium&&V.medium.url&&(!V.medium.size||V.medium.size<=20e6))?V.medium:(V.small&&V.small.url?V.small:(V.large&&V.large.url&&V.large.size<=15e6?V.large:V.tiny));
-        link=(c&&c.url)||'';
-      }else{
-        const files=(vd.video_files||[]).filter(f=>f.file_type==='video/mp4'&&f.width&&f.height>=f.width).sort((a,b)=>Math.abs(a.width-720)-Math.abs(b.width-720));
-        link=files.length?files[0].link:'';
-      }
-      if(!link){fails.push('klip bağlantısı yok');continue}
-      stage='download';
-      const px=$('proxyUrl').value.trim().replace(/\/+$/,'');
-      const fr=await fetch(px?px+'/?url='+encodeURIComponent(link):link);
-      if(!fr.ok)throw new Error('Klip indirilemedi ('+fr.status+')');
-      const blob=await fr.blob();
-      if(blob.size<20000)throw new Error('Klip boş geldi');
-      sc.blob=new Blob([blob],{type:'video/mp4'});ok++;recent.push(vd.id);
-      await sleep(150);
+      const r=await findClip(i,'',mods,seed,recentSet);
+      sc.q=r.q||sc.q||'';
+      if(r.blob){sc.blob=r.blob;ok++;rememberUsed(r.id)}else fails.push(r.fail);
+      await sleepMs(150);
     }catch(e){
-      if(e&&e.message==='KEY'){pst('Anahtar geçersiz. Anahtarı kontrol et.',true);$('pxFind').disabled=false;return}
-      if(e instanceof TypeError){pst(stage==='download'?'Klip indirme tarayıcı tarafından engellendi. Proxy adresi gerekir ya da “Kendi videolarını ekle”yi kullan.':'Stok sitesine bağlanılamadı. İnterneti ve anahtarı kontrol et.',true);$('pxFind').disabled=false;draw(0);return}
-      fails.push((e&&e.message)||'bilinmeyen hata');
+      const m=e&&e.message;
+      if(m==='KEY'||m==='NET_SEARCH'||m==='NET_DL'){
+        pst(m==='KEY'?'Anahtar geçersiz. Anahtarı kontrol et.':m==='NET_SEARCH'?'Stok sitesine bağlanılamadı. İnterneti ve anahtarı kontrol et.':'Klip indirme tarayıcı tarafından engellendi. Proxy adresi gerekir ya da “Kendi videolarını ekle”yi kullan.',true);
+        $('pxFind').disabled=false;renderScenes();draw(0);return;
+      }
+      fails.push(m||'bilinmeyen hata');
     }
   }
-  try{localStorage.setItem('pxUsed',JSON.stringify(recent.slice(-80)))}catch(e){}
+  renderScenes();
   let note='';
   const f0=scenes.find(x=>x.blob);
   if(f0){
     pst('İlk klip kontrol ediliyor…');
-    makeVid(f0);await sleep(3000);
+    makeVid(f0);await sleepMs(3000);
     const v0=f0.vid;
     note=v0&&v0.readyState>=2?' İlk klip oynatılabilir.':' Uyarı: ilk klip yüklenmedi (durum '+(v0?v0.readyState:'-')+(v0&&v0.error?', hata '+v0.error.code:'')+').';
   }
   $('pxFind').disabled=false;
-  pst(ok+'/'+scenes.length+' sahneye klip bulundu.'+(fails.length?' Sorun: '+[...new Set(fails)].slice(0,3).join('; ')+'.':' Beğenmediysen tekrar bas, yeni klipler gelir.')+note,(fails.length>0&&ok<scenes.length)||/Uyarı/.test(note));
-  draw(0);
+  pst(ok+'/'+scenes.length+' sahneye klip bulundu.'+(fails.length?' Sorun: '+[...new Set(fails)].slice(0,3).join('; ')+'.':' Beğenmediğin sahne için aşağıdan kelimeyi değiştirip tekrar ara.')+note,(fails.length>0&&ok<scenes.length)||/Uyarı/.test(note));
+  renderScenes();draw(0);
 });
 const STOP=new Set('about after again also because been before being between both could does doing down during each even from have having here into just like made make many more most much must only other over same should some such than that their them then there these they this those through very want were what when where which while with would your yours will been get got how why who our out its not and the for are but you was can has had one two any all new'.split(' '));
 function genMeta(){
@@ -855,7 +904,7 @@ function draw(t){
 
 function refresh(){
   const ok=words.length>0&&!!buf;$('kgen').disabled=!words.length||kBusy;$('metaBtn').disabled=!words.length;
-  $('prev').disabled=!ok||!!mode;$('rec').disabled=!ok||!!mode||!window.MediaRecorder;$('recHook').disabled=$('rec').disabled;
+  $('prev').disabled=!ok||!!mode;$('rec').disabled=!ok||!!mode||!window.MediaRecorder;$('recHook').disabled=$('rec').disabled;if(typeof renderScenes==='function')renderScenes();
   draw(0);
 }
 
