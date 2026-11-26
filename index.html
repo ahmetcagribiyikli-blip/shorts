@@ -45,7 +45,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
 #metaStatus{min-height:24px;font-size:15px;margin-top:8px}
 #metaStatus.err{color:var(--err)}
 #pxKey,#proxyUrl{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
-#quality,#hookStyle,#kvoice,#clipStyle{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
+#quality,#hookStyle,#kvoice,#clipStyle,#charPos{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
 #kStatus{min-height:24px;font-size:15px}
 #kStatus.err{color:var(--err)}
 #chName{width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);font:400 16px Archivo,sans-serif;margin-bottom:10px}
@@ -75,7 +75,7 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <div id="vbox" aria-hidden="true" style="position:fixed;left:0;top:0;width:2px;height:2px;overflow:hidden;opacity:.01;pointer-events:none"></div>
 <main>
 <h1>Shorts Stüdyo</h1>
-<p class="lead">Senaryoyu ve sesi yükle. Altyazılı, animasyonlu 9:16 videoyu telefonunda üret.</p>
+<p class="lead">Senaryoyu ve sesi yükle. Altyazılı, animasyonlu, konuşan karakterli 9:16 videoyu telefonunda üret.</p>
 
 <section>
 <h2><span class="n">1</span>Senaryo</h2>
@@ -89,10 +89,10 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <div class="hint">MP3 ya da M4A en sorunsuzu. Kelime zamanlaması konuşma hızına göre tahmin edilir; kayarsa aşağıdaki ayarı kullan.</div>
 <div class="hint" style="margin-top:14px"><b>Ya da</b> ücretsiz yapay zekâ sesiyle üret. İlk seferde yaklaşık 90 MB model indirir, Wi-Fi’de dene. Üretim bitene kadar sayfadan çıkma.</div>
 <select id="kvoice" aria-label="Ses seçimi">
+<option value="am_adam">Erkek, derin (ABD) – karakter için önerilen</option>
+<option value="am_michael">Erkek, sakin (ABD)</option>
 <option value="af_heart">Kadın, sıcak (ABD)</option>
 <option value="af_bella">Kadın, enerjik (ABD)</option>
-<option value="am_michael">Erkek, sakin (ABD)</option>
-<option value="am_adam">Erkek, derin (ABD)</option>
 </select>
 <div class="row"><button id="kgen" disabled>Sesi üret</button></div>
 <div id="kStatus" role="status"></div>
@@ -101,7 +101,7 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <section>
 <h2><span class="n">3</span>Görüntü (isteğe bağlı)</h2>
 <label class="file"><input type="file" id="ownClips" multiple><span id="ownName">Kendi videolarını ekle (ekran kaydı gibi)</span></label>
-<div class="hint">Birden fazla seçersen sahnelere sırayla dağıtılır. Tek video seçersen baştan sona akar. En iyisi, anlattığın işlemi telefonda ekran kaydıyla çekmek. Eklediğin videolar aşağıdaki listede her sahneye dağıtılır, tik ile seçebilirsin.</div>
+<div class="hint">Birden fazla seçersen sahnelere sırayla dağıtılır. Tek video seçersen baştan sona akar. En iyisi, anlattığın işlemi telefonda ekran kaydıyla çekmek. Eklediğin videolar aşağıdaki listede her sahneye dağıtılır, tik ile seçebilirsin. Karakter kullanıyorsan bu bölümü boş bırakabilirsin.</div>
 <div class="row"><button id="ownClear">Kendi videolarımı kaldır</button></div>
 <div class="hint">Her sahneye otomatik gerçek stok video koyar. Anahtar gerekir. Pexels şu an yeni anahtar vermiyor, bu yüzden <a href="https://pixabay.com/api/docs/" target="_blank" rel="noopener">Pixabay</a>’de ücretsiz hesap açıp o sayfada görünen anahtarı yapıştır. Pexels anahtarın varsa o da çalışır. Klipler veri harcar, Wi-Fi’de dene.</div>
 <input id="pxKey" type="text" placeholder="Pixabay veya Pexels API anahtarı" autocomplete="off" autocapitalize="off" spellcheck="false">
@@ -123,6 +123,11 @@ footer{max-width:520px;margin:0 auto;padding:0 16px 28px;font-size:13px;color:va
 <div class="stage"><canvas id="cv" width="1080" height="1920"></canvas></div>
 <div class="row"><button id="thumbRe">Önizlemeleri yenile</button></div>
 <div class="hint" id="useInfo"></div>
+<label class="fx"><input type="checkbox" id="charOn" checked> Konuşan karakter ekle</label>
+<select id="charPos" aria-label="Karakter yeri">
+<option value="left">Karakter: sol altta</option>
+<option value="right">Karakter: sağ altta</option>
+</select>
 <label class="ml" for="quality">Video kalitesi</label>
 <select id="quality">
 <option value="720">Akıcı 720p (önerilen, takılmayı azaltır)</option>
@@ -1015,6 +1020,100 @@ function idle(){
   g.fillText('SENARYO BEKLENİYOR',W/2,H/2);g.globalAlpha=1;
 }
 
+/* ---------- Konuşan karakter ---------- */
+let envC=null;
+function getEnv(){
+  if(!buf)return null;
+  if(envC&&envC.b===buf)return envC;
+  const d=buf.getChannelData(0),sr=buf.sampleRate,step=Math.max(1,Math.floor(sr/60)),n=Math.ceil(d.length/step),a=new Float32Array(n);
+  let mx=.0001;
+  for(let i=0;i<n;i++){
+    let s=0,c=0;const e=Math.min(d.length,(i+1)*step);
+    for(let k=i*step;k<e;k+=4){s+=d[k]*d[k];c++}
+    a[i]=Math.sqrt(s/Math.max(1,c));if(a[i]>mx)mx=a[i];
+  }
+  for(let i=0;i<n;i++)a[i]=Math.pow(Math.min(1,a[i]/mx),.7);
+  envC={b:buf,a};return envC;
+}
+function ampAt(t){
+  const e=getEnv();if(!e||t<0)return 0;
+  const i=Math.floor(t*60);let s=0,c=0;
+  for(let k=i-2;k<=i;k++){if(k>=0&&k<e.a.length){s+=e.a[k];c++}}
+  return c?s/c:0;
+}
+function limb(x0,y0,x1,y1){
+  g.strokeStyle='#14213D';g.lineWidth=54;g.lineCap='round';g.beginPath();g.moveTo(x0,y0);g.lineTo(x1,y1);g.stroke();
+  g.fillStyle='#F1C7A0';g.beginPath();g.arc(x1,y1,31,0,7);g.fill();
+}
+function drawChar(t,sc,local){
+  const left=$('charPos').value!=='right',cx=left?250:W-250,base=1500;
+  const am=ampAt(t),talk=am>.05;
+  const mood=(sc.hook||sc.kind==='down')?'wow':(/^(up|coins|shield|target|bulb|badge)$/.test(sc.kind)?'happy':(/^(stat|pie|clock)$/.test(sc.kind)?'point':'calm'));
+  const pop=Math.max(0,1-local*3.5),sz=(sc.hook?.82:1)*(1+.06*pop);
+  g.save();
+  g.translate(cx,base+Math.sin(t*2.2)*5-pop*24-(talk?am*10:0));
+  g.rotate(Math.sin(t*1.4)*.025+(mood==='wow'?Math.sin(t*28)*.012*am:0));
+  g.scale(sz*(left?1:-1),sz);
+  g.lineJoin='round';g.lineCap='round';
+  /* boyun ve gövde */
+  g.fillStyle='#E2AE86';g.fillRect(-32,90,64,60);
+  g.fillStyle='#14213D';g.beginPath();g.moveTo(-190,340);g.lineTo(-190,235);g.quadraticCurveTo(-190,135,-90,125);g.lineTo(90,125);g.quadraticCurveTo(190,135,190,235);g.lineTo(190,340);g.closePath();g.fill();
+  g.fillStyle='#F4F7FD';g.beginPath();g.moveTo(-54,125);g.lineTo(54,125);g.lineTo(0,240);g.closePath();g.fill();
+  g.fillStyle='#0E1730';
+  g.beginPath();g.moveTo(-54,125);g.lineTo(0,240);g.lineTo(-84,340);g.lineTo(-124,150);g.closePath();g.fill();
+  g.beginPath();g.moveTo(54,125);g.lineTo(0,240);g.lineTo(84,340);g.lineTo(124,150);g.closePath();g.fill();
+  g.fillStyle='#FFB703';g.beginPath();g.moveTo(-17,136);g.lineTo(17,136);g.lineTo(12,172);g.lineTo(28,305);g.lineTo(0,328);g.lineTo(-28,305);g.lineTo(-12,172);g.closePath();g.fill();
+  /* kafa */
+  g.fillStyle='#F1C7A0';
+  g.beginPath();g.arc(-104,6,20,0,7);g.fill();g.beginPath();g.arc(104,6,20,0,7);g.fill();
+  g.beginPath();g.ellipse(0,0,106,112,0,0,7);g.fill();
+  g.fillStyle='#2B1B12';g.beginPath();g.ellipse(0,-34,112,84,0,Math.PI,0);g.closePath();g.fill();
+  g.beginPath();g.ellipse(-62,-38,52,22,.35,0,7);g.fill();
+  /* yanaklar */
+  if(mood==='happy'){g.fillStyle='rgba(255,110,110,.28)';g.beginPath();g.arc(-66,38,20,0,7);g.fill();g.beginPath();g.arc(66,38,20,0,7);g.fill()}
+  /* gözler, gözlük, kaşlar */
+  const bl=(t%3.4)<.12?.12:1,wide=mood==='wow'?1.25:1;
+  g.fillStyle='#fff';
+  [-42,42].forEach(x=>{g.beginPath();g.ellipse(x,-4,22*wide,20*wide*bl,0,0,7);g.fill()});
+  g.fillStyle='#1A1A2E';
+  [-42,42].forEach(x=>{g.beginPath();g.ellipse(x+Math.sin(t*.7)*3,-3,9*wide,9*wide*bl,0,0,7);g.fill()});
+  g.strokeStyle='#1A1A2E';g.lineWidth=6;
+  [-42,42].forEach(x=>{g.beginPath();g.arc(x,-4,30,0,7);g.stroke()});
+  g.beginPath();g.moveTo(-12,-6);g.lineTo(12,-6);g.stroke();
+  const by=-48-(mood==='wow'?16:0)-(mood==='happy'?5:0);
+  g.strokeStyle='#2B1B12';g.lineWidth=10;
+  g.beginPath();g.moveTo(-68,by+4);g.lineTo(-20,by-(mood==='calm'?2:4));g.stroke();
+  g.beginPath();g.moveTo(68,by+4);g.lineTo(20,by-(mood==='calm'?2:4));g.stroke();
+  /* burun */
+  g.fillStyle='#E2AE86';g.beginPath();g.ellipse(0,24,8,11,0,0,7);g.fill();
+  /* ağız */
+  const o=Math.min(1,am*1.5+((mood==='wow'&&!talk)?.35:0));
+  if(o>.08){
+    const h=10+o*46,w=46+o*16,cy=56+h/4;
+    g.fillStyle='#5A1522';g.beginPath();g.ellipse(0,cy,w/2,h/2,0,0,7);g.fill();
+    g.fillStyle='#fff';g.beginPath();g.ellipse(0,cy-h/2+9,w/2-7,7,0,0,Math.PI);g.fill();
+    g.fillStyle='#E0566B';g.beginPath();g.ellipse(0,cy+h/4,w*.26,h*.18,0,0,7);g.fill();
+  }else{
+    g.strokeStyle='#7A2E2E';g.lineWidth=8;g.beginPath();g.moveTo(-28,54);g.quadraticCurveTo(0,mood==='happy'?82:68,28,54);g.stroke();
+  }
+  /* eller */
+  if(mood==='point'){
+    const hy=30+Math.sin(t*5)*10;
+    limb(150,215,232,hy+40);
+    g.fillStyle='#F1C7A0';rr(223,hy-52,18,62,9);g.fill();
+  }else if(mood==='happy'){
+    const hy=135+Math.sin(t*4)*7;
+    limb(150,230,232,hy);
+    g.fillStyle='#F1C7A0';rr(219,hy-72,26,58,13);g.fill();
+  }else if(mood==='wow'){
+    const wy=70+Math.sin(t*9)*6;
+    limb(-150,215,-182,wy);limb(150,215,182,wy);
+  }else if(talk){
+    limb(150,235,205,255-am*70);
+  }
+  g.restore();
+}
+
 function draw(t){
   g.setTransform(cv.width/W,0,0,cv.width/W,0,0);
   if(!words.length){idle();return}
@@ -1035,9 +1134,12 @@ function draw(t){
   
   if(sc.vid&&sc.vid.readyState>=2){vbg(sc,t,local);if(sc.kind==='stat'||sc.hook)illus(sc,t,local)}else{bg(sc,t,local);illus(sc,t,local)}
   const w=words[i];if(sc.hook)drawHook(sc,i,t,d);else caps(i,((f-w.t0)*d)/.18);
+  if($('charOn').checked)drawChar(t,sc,local);
   g.fillStyle='rgba(255,255,255,.28)';g.fillRect(90,70,W-180,10);
   g.fillStyle='#fff';g.fillRect(90,70,(W-180)*Math.min(1,t/d),10);trans(sc,local);watermark();
 }
+$('charOn').addEventListener('change',()=>{if(!mode)draw(0)});
+$('charPos').addEventListener('change',()=>{if(!mode)draw(0)});
 
 function refresh(){
   const ok=words.length>0&&!!buf;$('kgen').disabled=!words.length||kBusy;$('metaBtn').disabled=!words.length;
