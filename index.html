@@ -197,7 +197,7 @@ function parse(){
   const raw=$('script').value.replace(/\[[^\]]*\]/g,' ').replace(/\s+/g,' ').trim();
   const sents=(raw.match(/[^.!?]+[.!?]*["”’)]*/g)||[]).map(s=>s.trim()).filter(Boolean);
   words=[];scenes=[];chunks=[];
-  {let h=7;for(let q=0;q<raw.length;q++)h=(h*31+raw.charCodeAt(q))>>>0;SEED=h;const SU=['#14213D','#3B1F2B','#1F3A2E','#2B2B33'],TI=['#FFB703','#D63C46','#28BE78','#8A5CF6'],HA=['#2B1B12','#161616','#6B4423','#9A9A9A'];SUIT=SU[h%4];TIE=TI[(h>>2)%4];HAIR=HA[(h>>4)%4];GLASS=((h>>6)%2)===0}
+  {let h=7;for(let q=0;q<raw.length;q++)h=(h*31+raw.charCodeAt(q))>>>0;SEED=h;const SU=['#14213D','#3B1F2B','#1F3A2E','#2B2B33'],TI=['#FFB703','#D63C46','#28BE78','#8A5CF6'],HA=['#2B1B12','#161616','#6B4423','#9A9A9A'];SUIT='#14213D';TIE=TI[(h>>2)%4];HAIR='#2B1B12';GLASS=true}
   sents.forEach((s,si)=>{
     const start=words.length;
     s.split(' ').filter(Boolean).forEach(w=>{
